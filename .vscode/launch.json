@@ -1,0 +1,29 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Growth Estimate Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/eenitug/dcf_project/ge.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: fcfs",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/eenitug/dcf_project/fcfs.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python value_estimator.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/eenitug/dcf_project/value_estimator.py",
+            "console": "integratedTerminal"
+        },
+    ]
+}
