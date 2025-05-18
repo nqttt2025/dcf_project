@@ -1,0 +1,8 @@
+.idea/
+venv/
+**/__pycache__/
+**/*.log
+**/*.tar
+.vscode
+**/*tmp
+.vscode/launch.json

@@ -104,7 +104,7 @@ def price_board_stock(ticker):
 
     df = json_normalize(data['data'])
     # drop columns named seq
-
+    print(df)
     df.drop(columns=['seq'], inplace=True)
     df = df[['t', 'cp', 'fv', 'mav', 'nstv', 'nstp', 'rsi', 'macdv', 'macdsignal',
              'tsignal', 'avgsignal', 'ma20', 'ma50', 'ma100', 'session', 'mw3d',
@@ -136,13 +136,154 @@ def price_board_stock(ticker):
     #                         'lp1y': 'Đáy 1Y', 'hp1yp': '%Đỉnh 1Y', 'lp1yp': '%Đáy 1Y', 'delta1m': '%Giá - %VNI (1M)',
     #                         'delta1y': '%Giá - %VNI (1Y)', 'bv': 'Khối lượng Dư mua', 'av': 'Khối lượng Dư bán',
     #                         'hmp': 'Khớp nhiều nhất', 'vnipe': 'VNINDEX P/E', 'vnipb': 'VNINDEX P/B'})
+    # return 118000.0
+    print(df.cp.values[0])
     return float(df.cp.values[0])
 
-# if __name__ == "__main__":
-#     ticker = "FPT"
-#     try:
-#         free_cash_flows = get_earnings_per_share_Diluted(ticker)
-#         print(f"Shares Outstanding for {ticker}: {free_cash_flows}")
-#         print(price_board_stock("FPT"))
-#     except Exception as e:
-#         print(f"Error: {e}")
+
+
+def get_market_cap(ticker):
+    """_summary_
+
+    Args:
+        ticker (_type_): _description_
+
+    Raises:
+        Exception: _description_
+        Exception: _description_
+        Exception: _description_
+        Exception: _description_
+        Exception: _description_
+
+    Returns:
+        _type_: _description_
+    """    
+    url="https://stockanalysis.com/quote/hose/{}/market-cap/".format(ticker)
+    response = requests.get(url, verify=False)
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch data for {ticker}. HTTP Status Code: {response.status_code}")
+    parser = html.fromstring(response.content)
+    try:
+        price_xpath = "//div[contains(text(),'Stock Price')]/div"
+        price = float(parser.xpath(price_xpath)[0].text_content().replace(',', ''))        
+        market_cap_xpath = "//div[contains(text(),'Market Cap')]/div"
+        market_cap = str(parser.xpath(market_cap_xpath)[0].text_content().replace(',', ''))
+        factor_mapping = {
+            'T': 1000000000000,
+            'B': 1000000000,
+            'M': 1000000,
+            'K': 1000
+        }
+        # Determine the factor based on the suffix
+        # 'T' for trillion, 'B' for billion, 'M' for million, 'K' for thousand
+        # Default factor is 1 (no suffix)
+        # Check if the market_cap string contains any of the suffixes
+        factor = 1
+        if 'T' in market_cap:
+            factor = factor_mapping['T']
+        elif 'B' in market_cap:
+            factor = factor_mapping['B']
+        elif 'M' in market_cap:
+            factor = factor_mapping['M']
+        elif 'K' in market_cap:
+            factor = factor_mapping['K']
+
+        market_cap = float(market_cap.replace('B', '').replace('M', '').replace('K', '').replace('T', '')) * factor
+        return market_cap, price
+
+    except IndexError:
+        raise Exception("Unable to locate Market Cap data on the page.")
+    except ValueError:
+        raise Exception("Unable to convert Market Cap data to float.")
+    except TypeError:
+        raise Exception("Market Cap data is not in the expected format.")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}")
+
+def get_equity(ticker):
+    """
+    This function returns the equity of a target stocks list.
+    Args:
+        ticker (:obj:`str`, required): STRING list of symbols separated by "," without any space. Ex: "TCB,SSI,BID"
+    """
+    url = "https://stockanalysis.com/quote/hose/{}/statistics/".format(ticker)
+    response = requests.get(url, verify=False)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch data for {ticker}. HTTP Status Code: {response.status_code}")
+    parser = html.fromstring(response.content)
+    try:
+        equity_xpath = "//tr[.//td[.//span[contains(text(),'Equity (Book Value)')]]]/td[2]"
+        equity = parser.xpath(equity_xpath)[0]
+        Equity_value = float(equity.attrib.get('title').replace(',', ''))
+        return Equity_value
+
+    except IndexError:
+        raise Exception("Unable to locate Total Equity data on the page.")
+    except ValueError:
+        raise Exception("Unable to convert Total Equity data to float.")
+    except TypeError:
+        raise Exception("Total Equity data is not in the expected format.")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}")
+
+def get_staticvalue(ticker):
+    """
+    This function returns the static of a target stocks list.
+    Args:
+        ticker (:obj:`str`, required): STRING list of symbols separated by "," without any space. Ex: "TCB,SSI,BID"
+    """
+    url = "https://stockanalysis.com/quote/hose/{}/statistics/".format(ticker)
+    response = requests.get(url, verify=False)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch data for {ticker}. HTTP Status Code: {response.status_code}")
+    parser = html.fromstring(response.content)
+    try:
+        equity_xpath = "//tr[.//td[.//span[contains(text(),'Equity (Book Value)')]]]/td[2]"
+        debt_xpath = "//tr[.//td[.//span[contains(text(),'Total Debt')]]]/td[2]"
+        equity = parser.xpath(equity_xpath)[0]
+        Equity_value = float(equity.attrib.get('title').replace(',', ''))
+        debt = parser.xpath(debt_xpath)[0]
+        Debt_value = float(debt.attrib.get('title').replace(',', ''))
+        return Equity_value, Debt_value
+
+    except IndexError:
+        raise Exception("Unable to locate Total Equity data on the page.")
+    except ValueError:
+        raise Exception("Unable to convert Total Equity data to float.")
+    except TypeError:
+        raise Exception("Total Equity data is not in the expected format.")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}")
+
+def calculate_wacc(E, D, Re, Rd, Tc):
+    """
+    E: Giá trị vốn chủ sở hữu (Equity)
+    D: Giá trị nợ (Debt)
+    Re: Chi phí vốn chủ sở hữu (Cost of Equity, %)
+    Rd: Chi phí nợ (Cost of Debt, %)
+    Tc: Thuế suất thu nhập doanh nghiệp (%)
+    """
+    V = E + D
+    wacc = (E/V) * Re + (D/V) * Rd * (1 - Tc)
+    return wacc
+
+# Ví dụ số liệu cho FPT (bạn cần cập nhật số liệu thực tế)
+# E = 7.5e12   # Vốn hóa thị trường (VND)
+# D = 3.0e12   # Tổng nợ vay (VND)
+# Re = 0.15    # Chi phí vốn chủ sở hữu (15%)
+# Rd = 0.08    # Chi phí nợ (8%)
+# Tc = 0.20    # Thuế suất thu nhập doanh nghiệp (20%)
+
+# wacc = calculate_wacc(E, D, Re, Rd, Tc)
+# print(f"WACC của FPT: {wacc*100:.2f}%")
+
+if __name__ == "__main__":
+    ticker = "FPT"
+    try:
+        market_cap = get_equity(ticker)
+        print(f"Market cap for {ticker}: {market_cap}")
+    except Exception as e:
+        print(f"Error: {e}")

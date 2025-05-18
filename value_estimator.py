@@ -4,6 +4,7 @@ import json
 import argparse
 from collections import OrderedDict
 from fcfs import get_free_cash_flow, get_shares_outstanding, get_earnings_per_share_Diluted, price_board_stock
+from ge import get_growth_estimate
 import warnings
 warnings.filterwarnings('ignore')
 # //tr[.//td[.//span[.//div[text()='Free Cash Flow']]]]
@@ -34,7 +35,7 @@ def parse(ticker):
     #         except:
     #             ge = []
     #         break
-    ge = 13.0
+    ge = get_growth_estimate(ticker.upper())
 
     
     shares = get_shares_outstanding(ticker.upper())
@@ -72,7 +73,7 @@ def graham(data):
         expected_value = data['eps'] * (8.5 + 2 * (data['ge']))
         ge_priced_in = (data['mp'] / data['eps'] - 8.5) / 2
 
-        print("Expected value based on growth rate: {} %".format(expected_value))
+        print("Expected value based on growth rate: {}".format(expected_value))
         print("Growth rate priced in for next 7-10 years: {}\n".format(ge_priced_in))
     else:
         print("Not applicable since EPS is negative.")
