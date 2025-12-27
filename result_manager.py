@@ -12,7 +12,7 @@ class ResultManager:
     """
     Quản lý lưu trữ kết quả DCF valuation
     Format: results/{stock_name}_result.json
-           {project_root}/{stock_name}.log
+           {project_root}/{stock_name}.text
     """
 
     def __init__(self):
@@ -33,7 +33,7 @@ class ResultManager:
         """
         stock_name_lower = stock_name.lower()
         result_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.json')
-        log_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.log')
+        log_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.text')
 
         # Thêm timestamp
         result_with_timestamp = valuation_result.copy()
@@ -165,7 +165,7 @@ class ResultManager:
         """
         stock_name_lower = stock_name.lower()
         result_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.json')
-        log_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.log')
+        log_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.text')
 
         deleted = False
         if os.path.exists(result_file):
@@ -183,7 +183,7 @@ class ResultManager:
         """
         if os.path.exists(self.results_dir):
             for file in os.listdir(self.results_dir):
-                if file.endswith('_result.json') or file.endswith('_result.log'):
+                if file.endswith('_result.json') or file.endswith('_result.text'):
                     os.remove(os.path.join(self.results_dir, file))
 
 
