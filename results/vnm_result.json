@@ -1,7 +1,7 @@
 {
   "ticker": "VNM",
   "config_file": "/home/eenitug/dcf_project/database/VNM.cfg",
-  "price": 50000,
+  "price": 61500.0,
   "market_cap": 128532259867500.0,
   "eps": 1209.0049885685482,
   "shares": 2089955445.0,
@@ -15,6 +15,6 @@
   "graham_fair_value": 23110.721907374234,
   "average_fair_value": 21273.35951956403,
   "cache_file": "/home/eenitug/dcf_project/data/vnm_cache.json",
-  "saved_at": "2025-12-27 19:31:27 UTC",
+  "saved_at": "2025-12-27 19:32:54 UTC",
   "stock_name": "VNM"
 }
