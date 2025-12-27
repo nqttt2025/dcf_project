@@ -4,6 +4,7 @@ Results Manager - Lưu lại kết quả DCF cho từng mã cổ phiếu
 
 import os
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,7 @@ class ResultManager:
     """
     Quản lý lưu trữ kết quả DCF valuation
     Format: results/{stock_name}_result.json
+           results/{stock_name}.log
     """
     
     def __init__(self):
@@ -26,10 +28,11 @@ class ResultManager:
             valuation_result: Dictionary chứa kết quả định giá
         
         Returns:
-            Đường dẫn tới file kết quả
+            Tuple của (đường dẫn JSON, đường dẫn LOG)
         """
         stock_name_lower = stock_name.lower()
         result_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.json')
+        log_file = os.path.join(self.results_dir, f'{stock_name_lower}.log')
         
         # Thêm timestamp
         result_with_timestamp = valuation_result.copy()
@@ -39,11 +42,56 @@ class ResultManager:
         # Chuyển đổi các giá trị không thể serialize
         result_with_timestamp = self._serialize_result(result_with_timestamp)
         
-        # Lưu lên file
+        # Lưu lên file JSON
         with open(result_file, 'w', encoding='utf-8') as f:
             json.dump(result_with_timestamp, f, indent=2, ensure_ascii=False)
         
-        return result_file
+        # Lưu lên file LOG
+        self._save_as_log(log_file, result_with_timestamp)
+        
+        return result_file, log_file
+    
+    def _save_as_log(self, log_file, data):
+        """
+        Lưu kết quả dưới dạng text log file
+        
+        Args:
+            log_file: Đường dẫn file log
+            data: Dictionary chứa kết quả
+        """
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write(f"DCF VALUATION RESULT - {data.get('stock_name', 'Unknown')}\n")
+            f.write("=" * 80 + "\n")
+            f.write(f"Saved at: {data.get('saved_at', 'N/A')}\n")
+            f.write("-" * 80 + "\n\n")
+            
+            # Format kết quả một cách dễ đọc
+            for key, value in data.items():
+                if key not in ['stock_name', 'saved_at']:
+                    # Định dạng key thành readable format
+                    formatted_key = self._format_key(key)
+                    
+                    if isinstance(value, dict):
+                        f.write(f"\n{formatted_key}:\n")
+                        for sub_key, sub_value in value.items():
+                            formatted_sub_key = self._format_key(sub_key)
+                            f.write(f"  {formatted_sub_key}: {sub_value}\n")
+                    elif isinstance(value, (list, tuple)):
+                        f.write(f"\n{formatted_key}:\n")
+                        for i, item in enumerate(value):
+                            f.write(f"  [{i}]: {item}\n")
+                    else:
+                        f.write(f"{formatted_key}: {value}\n")
+            
+            f.write("\n" + "=" * 80 + "\n")
+    
+    def _format_key(self, key):
+        """
+        Chuyển đổi key thành readable format
+        Ví dụ: 'valuation_price' -> 'Valuation Price'
+        """
+        return ' '.join(word.capitalize() for word in key.split('_'))
     
     def _serialize_result(self, data):
         """
@@ -116,11 +164,17 @@ class ResultManager:
         """
         stock_name_lower = stock_name.lower()
         result_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.json')
+        log_file = os.path.join(self.results_dir, f'{stock_name_lower}.log')
         
+        deleted = False
         if os.path.exists(result_file):
             os.remove(result_file)
-            return True
-        return False
+            deleted = True
+        if os.path.exists(log_file):
+            os.remove(log_file)
+            deleted = True
+        
+        return deleted
     
     def clear_all_results(self):
         """
@@ -128,7 +182,7 @@ class ResultManager:
         """
         if os.path.exists(self.results_dir):
             for file in os.listdir(self.results_dir):
-                if file.endswith('_result.json'):
+                if file.endswith('_result.json') or file.endswith('.log'):
                     os.remove(os.path.join(self.results_dir, file))
 
 
