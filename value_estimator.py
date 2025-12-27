@@ -3,10 +3,14 @@ import requests
 import json
 import argparse
 from collections import OrderedDict
-from fcfs import get_free_cash_flow, get_shares_outstanding, get_earnings_per_share_Diluted, price_board_stock
+from fcfs import get_free_cash_flow, get_shares_outstanding, get_earnings_per_share_Diluted, price_board_stock, get_market_cap
 from ge import get_growth_estimate
+from cache_manager import get_cache_manager
+from logger import get_logger
 import warnings
 warnings.filterwarnings('ignore')
+
+logger = get_logger()
 # //tr[.//td[.//span[.//div[text()='Free Cash Flow']]]]
 # "//tr[.//td[.//span[.//div[text()='Free Cash Flow']]]]"
 
@@ -21,8 +25,7 @@ def parse(ticker):
     # print(parser)
     # fcfs = parser.xpath('//table[contains(@id,"financial-table")]//tr[td/span/text()[contains(., "Free Cash Flow")]]')[0].xpath('.//td/span/text()')[1:]
     last_fcf = get_free_cash_flow(ticker.upper())
-    
-    url = "https://finance.yahoo.com/quote/{}/analysis?p={}".format(ticker, ticker)
+
     # response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'})
     # parser = html.fromstring(response.content)
     # ge = parser.xpath('//table//tbody//tr')
@@ -37,11 +40,14 @@ def parse(ticker):
     #         break
     ge = get_growth_estimate(ticker.upper())
 
-    
     shares = get_shares_outstanding(ticker.upper())
 
     eps = get_earnings_per_share_Diluted(ticker.upper())
     market_price = price_board_stock(ticker.upper())
+
+    # Fetch market cap to cache it
+    market_cap, _ = get_market_cap(ticker.upper())
+
     return {'fcf': last_fcf, 'ge': ge, 'yr': 5, 'dr': 10, 'pr': 2.5, 'shares': shares, 'eps': eps, 'mp': market_price}
 
 def dcf(data):
@@ -58,12 +64,12 @@ def dcf(data):
 
     pvs = [round(f * d, 2) for f, d in zip(forecast[:-1], discount_factors)]
     pvs.append(round(discount_factors[-1] * forecast[-1], 2)) # discounted terminal value
-    
-    print("Forecasted cash flows: {}".format(", ".join(map(str, forecast))))
-    print("PV of cash flows: {}".format(", ".join(map(str, pvs))))
+
+    logger.info("Forecasted cash flows: {}".format(", ".join(map(str, forecast))))
+    logger.info("PV of cash flows: {}".format(", ".join(map(str, pvs))))
 
     dcf = sum(pvs)
-    print("Fair value: {}\n".format(dcf / data['shares']))
+    logger.info("Fair value: {}".format(dcf / data['shares']))
 
 def reverse_dcf(data):
     pass
@@ -73,10 +79,10 @@ def graham(data):
         expected_value = data['eps'] * (8.5 + 2 * (data['ge']))
         ge_priced_in = (data['mp'] / data['eps'] - 8.5) / 2
 
-        print("Expected value based on growth rate: {}".format(expected_value))
-        print("Growth rate priced in for next 7-10 years: {}\n".format(ge_priced_in))
+        logger.info("Expected value based on growth rate: {}".format(expected_value))
+        logger.info("Growth rate priced in for next 7-10 years: {}".format(ge_priced_in))
     else:
-        print("Not applicable since EPS is negative.")
+        logger.warning("Not applicable since EPS is negative.")
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
@@ -86,15 +92,15 @@ if __name__ == "__main__":
     # argparser.add_argument('--terminal_rate', help='Terminal growth rate. Default: 2.5')
     # argparser.add_argument('--period', help='Time period in years. Default: 5')
     # args = argparser.parse_args()
-    
+
     # ticker = args.ticker
     ticker = "fpt"
 
-    print("Fetching data for %s...\n" % (ticker))
+    logger.info("Fetching data for %s..." % (ticker))
     data = parse("fpt")
-    print("=" * 80)
-    print("DCF model (basic)")
-    print("=" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info("DCF model (basic)")
+    logger.info("=" * 80)
 
     # if args.period is not None:
     #     data['yr'] = int(args.period)
@@ -105,17 +111,21 @@ if __name__ == "__main__":
     # if args.terminal_rate is not None:
     #     data['pr'] = float(args.terminal_rate)
 
-    print("Market price: {}".format(data['mp']))
-    print("EPS: {}".format(data['eps']))
-    print("Growth estimate: {}".format(data['ge']))
-    print("Term: {} years".format(data['yr']))
-    print("Discount Rate: {}%".format(data['dr']))
-    print("Perpetual Rate: {}%\n".format(data['pr']))
+    logger.info("Market price: {}".format(data['mp']))
+    logger.info("EPS: {}".format(data['eps']))
+    logger.info("Growth estimate: {}".format(data['ge']))
+    logger.info("Term: {} years".format(data['yr']))
+    logger.info("Discount Rate: {}%".format(data['dr']))
+    logger.info("Perpetual Rate: {}%".format(data['pr']))
 
     dcf(data)
 
-    print("=" * 80)
-    print("Graham style valuation basic (Page 295, The Intelligent Investor)")
-    print("=" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info("Graham style valuation basic (Page 295, The Intelligent Investor)")
+    logger.info("=" * 80)
 
     graham(data)
+    
+    # Save cache to file at the end
+    cache_manager = get_cache_manager()
+    cache_manager.save_to_file()
