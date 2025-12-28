@@ -73,6 +73,10 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
 async def perform_analysis(ticker: str, config_file: str):
     """Perform DCF analysis"""
     try:
+        # Update status to processing
+        running_analyses[ticker]['status'] = 'processing'
+        running_analyses[ticker]['progress'] = 'Fetching data...'
+        
         # Run DCF calculation
         result = await calculate_dcf_from_config(config_file)
         
@@ -83,6 +87,12 @@ async def perform_analysis(ticker: str, config_file: str):
             'status': 'completed',
             'result': result
         }
+        
+        # Remove from running after 5 minutes (cleanup)
+        import asyncio
+        await asyncio.sleep(300)  # 5 minutes
+        if ticker in running_analyses and running_analyses[ticker]['status'] == 'completed':
+            running_analyses.pop(ticker, None)
     except Exception as e:
         # Mark as failed
         running_analyses[ticker] = {
@@ -91,6 +101,12 @@ async def perform_analysis(ticker: str, config_file: str):
             'status': 'failed',
             'error': str(e)
         }
+        
+        # Remove from running after 1 minute (cleanup)
+        import asyncio
+        await asyncio.sleep(60)  # 1 minute
+        if ticker in running_analyses and running_analyses[ticker]['status'] == 'failed':
+            running_analyses.pop(ticker, None)
 
 @app.get("/analysis/{ticker}")
 def get_analysis_result(ticker: str):

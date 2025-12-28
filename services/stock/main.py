@@ -8,6 +8,13 @@ import os
 import sys
 from pathlib import Path
 
+# Try to import httpx for syncing with DCF service
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+
 # Add project root to path
 # In Docker container, __file__ is /app/main.py, so we use /app directly
 if Path('/app').exists():
@@ -38,8 +45,32 @@ if config_dir.exists():
     config_files = list(config_dir.glob('*.cfg'))
     print(f"  Found {len(config_files)} config files")
 
-# Track running processes
+# Track running processes - sync with DCF service
 running_processes = {}
+
+def sync_running_status():
+    """Sync running status with DCF service"""
+    if not HAS_HTTPX:
+        return
+    
+    try:
+        dcf_service_url = os.getenv('DCF_SERVICE_URL', 'http://dcf:8001')
+        response = httpx.get(f"{dcf_service_url}/status", timeout=5.0)
+        if response.status_code == 200:
+            dcf_status = response.json()
+            # Update running_processes from DCF service
+            for ticker, analysis_info in dcf_status.get('analyses', {}).items():
+                if analysis_info.get('status') == 'running':
+                    running_processes[ticker] = {
+                        'status': 'running',
+                        'started_at': analysis_info.get('started_at')
+                    }
+                elif analysis_info.get('status') in ['completed', 'failed']:
+                    # Remove from running if completed or failed
+                    running_processes.pop(ticker, None)
+    except Exception as e:
+        # Silently fail - DCF service might not be available
+        pass
 
 @app.get("/")
 def root():
@@ -54,6 +85,9 @@ def health_check():
 @app.get("/stocks")
 def list_stocks():
     """Lấy danh sách tất cả cổ phiếu với trạng thái"""
+    # Sync running status with DCF service
+    sync_running_status()
+    
     stocks = []
     
     # Get all config files
@@ -168,6 +202,9 @@ def get_stock_config(ticker: str):
 def get_stock_status(ticker: str):
     """Lấy trạng thái của một cổ phiếu"""
     ticker = ticker.upper()
+    
+    # Sync running status with DCF service
+    sync_running_status()
     
     if ticker in running_processes:
         return {

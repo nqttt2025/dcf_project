@@ -159,10 +159,25 @@ class DCFCalculator:
 
     def calculate_dcf(self, data):
         """Calculate DCF valuation"""
-        forecast = [data['fcf']]
-
+        # Validate input data
+        if data['fcf'] is None:
+            raise ValueError(f"FCF is None for {self.ticker}. Cannot calculate DCF.")
+        
+        if data['shares'] is None or data['shares'] <= 0:
+            raise ValueError(f"Shares is None or invalid ({data['shares']}) for {self.ticker}. Cannot calculate DCF.")
+        
+        # Check for suspiciously large shares (likely unit error)
+        if data['shares'] > 1e12:  # More than 1 trillion shares
+            self.logger.warning(f"Suspiciously large shares value for {self.ticker}: {data['shares']:,.0f}. This might be a unit error.")
+        
+        # Warn if FCF is negative
+        if data['fcf'] < 0:
+            self.logger.warning(f"FCF is negative for {self.ticker}: {data['fcf']:,.0f} VND. DCF calculation may produce negative fair value.")
+        
         if data['ge'] is None or data['ge'] == []:
             raise ValueError("Growth rate not available")
+        
+        forecast = [data['fcf']]
 
         # Forecast cash flows
         for _ in range(1, self.dcf_params['yr']):

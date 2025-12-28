@@ -171,6 +171,40 @@ header h1 {
     margin-bottom: 15px;
 }
 
+.stock-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    flex-wrap: wrap;
+}
+
+.btn-run-dcf {
+    flex: 1;
+    min-width: 120px;
+    padding: 0.6rem 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-run-dcf:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-run-dcf:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+}
+
 .ticker {
     font-size: 1.8em;
     font-weight: bold;
