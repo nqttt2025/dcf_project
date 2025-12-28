@@ -2,8 +2,10 @@
 venv/
 **/__pycache__/
 **/*.log
-# Keep docker build logs directory structure but ignore log files
+# Keep logs directory structure but ignore log files
+logs/app/*.log
 logs/docker/*.log
+!logs/app/.gitkeep
 !logs/docker/.gitkeep
 **/*.tar
 .vscode

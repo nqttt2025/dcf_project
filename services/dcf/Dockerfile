@@ -26,7 +26,7 @@ COPY data /app/data
 COPY services/dcf/main.py /app/main.py
 
 # Create necessary directories
-RUN mkdir -p /app/data/results /app/data/cache /app/log
+RUN mkdir -p /app/data/results /app/data/cache /app/logs/app /app/logs/docker
 
 # Set PYTHONPATH
 ENV PYTHONPATH=/app

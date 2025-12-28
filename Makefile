@@ -354,8 +354,9 @@ docker-rebuild:
 		for img in $(DOCKER_IMAGES); do \
 			IMAGE_NAME="$(DOCKER_IMAGE_PREFIX)-$$img"; \
 			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:$$VERSION"; then \
-				# Tag versioned image as latest for docker-up compatibility
 				docker tag $$IMAGE_NAME:$$VERSION $$IMAGE_NAME:latest 2>&1 | tee -a $$LOG_FILE || true; \
+			elif docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
+				docker tag $$IMAGE_NAME:latest $$IMAGE_NAME:$$VERSION 2>&1 | tee -a $$LOG_FILE || true; \
 			fi; \
 		done; \
 	fi; \

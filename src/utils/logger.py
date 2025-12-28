@@ -20,7 +20,9 @@ class LoggerSingleton:
         self.logger.setLevel(logging.DEBUG)
 
         if not self.logger.handlers:
-            log_dir = os.path.join(os.path.dirname(__file__), 'log')
+            # Use logs/app/ directory (unified logging directory)
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            log_dir = os.path.join(project_root, 'logs', 'app')
             os.makedirs(log_dir, exist_ok=True)
             log_file = os.path.join(log_dir, 'fcfs.log')
 
@@ -72,7 +74,9 @@ class LoggerSingleton:
         logger.handlers = []
         
         # Create log file for this stock
-        log_dir = os.path.join(os.path.dirname(__file__), 'log')
+        # Use logs/app/ directory (unified logging directory)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        log_dir = os.path.join(project_root, 'logs', 'app')
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f'dcf_{stock_name_lower}.log')
         

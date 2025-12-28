@@ -3,12 +3,12 @@
 ## 📋 What Was Added
 
 ### 1. Per-Stock Logging
-Each stock valuation creates its own log file in the `log/` directory with format: `dcf_{stock_name}.log`
+Each stock valuation creates its own log file in the `logs/app/` directory with format: `dcf_{stock_name}.log`
 
 **Example Log Files:**
-- `log/dcf_fpt.log` - All logs related to FPT analysis
-- `log/dcf_vnm.log` - All logs related to VNM analysis
-- `log/dcf_bid.log` - All logs related to BID analysis
+- `logs/app/dcf_fpt.log` - All logs related to FPT analysis
+- `logs/app/dcf_vnm.log` - All logs related to VNM analysis
+- `logs/app/dcf_bid.log` - All logs related to BID analysis
 
 ### 2. Results Management
 Each stock valuation saves its results in the `data/results/` directory with format: `{stock_name}_result.json`
@@ -24,11 +24,15 @@ Each stock valuation saves its results in the `data/results/` directory with for
 
 ```
 dcf_project/
-├── log/
-│   ├── fcfs.log              (General logs)
-│   ├── dcf_fpt.log           (FPT-specific logs) ← NEW
-│   ├── dcf_vnm.log           (VNM-specific logs) ← NEW
-│   └── dcf_bid.log           (BID-specific logs) ← NEW
+├── logs/
+│   ├── app/
+│   │   ├── fcfs.log              (General logs)
+│   │   ├── dcf_fpt.log           (FPT-specific logs)
+│   │   ├── dcf_vnm.log           (VNM-specific logs)
+│   │   └── dcf_bid.log           (BID-specific logs)
+│   └── docker/
+│       ├── docker-build-*.log    (Docker build logs)
+│       └── docker-rebuild-*.log (Docker rebuild logs)
 │
 ├── data/
 │   └── results/              (← RESULTS DIRECTORY)
@@ -56,13 +60,13 @@ dcf_project/
 from logger import get_stock_logger
 
 logger = get_stock_logger('FPT')
-logger.info("This goes to log/dcf_fpt.log")
+logger.info("This goes to logs/app/dcf_fpt.log")
 
 # Get general logger (unchanged)
 from logger import get_logger
 
 logger = get_logger()
-logger.info("This goes to log/fcfs.log")
+logger.info("This goes to logs/app/fcfs.log")
 ```
 
 ### result_manager.py (NEW)
