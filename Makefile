@@ -120,27 +120,34 @@ dcf:
 	@echo "Running DCF analysis for $(TICKER)..."
 	@$(PYTHON) $(DCF_SCRIPT) $(TICKER).cfg
 
-# Run DCF analysis for all VN30 stocks
+# Run DCF analysis for all VN30 stocks (with retry & delay for API stability)
 dcf-all:
-	@echo "Running DCF analysis for all VN30 stocks..."
-	@$(PYTHON) run_all_dcf_main.py
-
-dcf-all-retry:
-	@echo "Running DCF analysis for all VN30 stocks (with retry & delay)..."
+	@echo "Running DCF analysis for all VN30 stocks (with retry & delay for API stability)..."
 	@$(PYTHON) scripts/run_all_dcf_with_retry.py
+
+# Run DCF analysis for all VN30 stocks (fast, no retry - use with caution)
+dcf-all-fast:
+	@echo "Running DCF analysis for all VN30 stocks (fast mode, no retry)..."
+	@echo "Warning: This may fail due to API rate limiting. Use 'make dcf-all' for stable runs."
+	@$(PYTHON) run_all_dcf_main.py
 
 # Show DCF analysis help
 dcf-help:
 	@echo "DCF Analysis Commands:"
 	@echo ""
 	@echo "  make dcf TICKER=<ticker>     - Run DCF analysis for a specific stock"
-	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks"
+	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks (with retry & delay)"
+	@echo "  make dcf-all-fast            - Run DCF analysis for all VN30 stocks (fast, no retry)"
 	@echo "  make dcf-help                - Show this help"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make dcf TICKER=VNM"
 	@echo "  make dcf TICKER=VCB"
 	@echo "  make dcf TICKER=FPT"
+	@echo "  make dcf-all                 # Recommended: includes retry & delay for API stability"
+	@echo ""
+	@echo "Note: 'make dcf-all' uses retry logic and delays to ensure API stability."
+	@echo "      Use 'make dcf-all-fast' only if you need faster execution (may fail due to rate limits)."
 	@echo ""
 	@echo "Available tickers (VN30):"
 	@ls -1 $(CONFIG_DIR)/*.cfg 2>/dev/null | sed 's|$(CONFIG_DIR)/||' | sed 's|\.cfg||' | sort | tr '\n' ' ' && echo ""
@@ -206,7 +213,8 @@ help:
 	@echo "  make test-dcf     - Run DCFCalculator tests"
 	@echo ""
 	@echo "  make dcf TICKER=<ticker>     - Run DCF analysis for a stock"
-	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks"
+	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks (with retry & delay)"
+	@echo "  make dcf-all-fast            - Run DCF analysis for all VN30 stocks (fast, no retry)"
 	@echo "  make dcf-help                - Show DCF analysis help"
 	@echo ""
 	@echo "  make pe TICKER=<ticker> [INDUSTRY=<industry>] - Calculate PE for a stock"
@@ -221,5 +229,5 @@ help:
 	@echo "  make clean-all    - Clean everything including data"
 	@echo "  make help         - Show this help message"
 
-.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-help pe pe-all pe-help
+.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help
 

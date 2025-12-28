@@ -95,6 +95,19 @@ class DCFCalculator:
             'base_pe': self.config.getfloat('graham', 'base_pe', fallback=8.5),
             'growth_multiplier': self.config.getfloat('graham', 'growth_multiplier', fallback=2.0),
         }
+        
+        # Load report language (default: Vietnamese)
+        try:
+            if 'report' in self.config:
+                self.report_language = self.config.get('report', 'language', fallback='vi')
+            else:
+                self.report_language = 'vi'
+        except:
+            self.report_language = 'vi'
+        
+        # Ensure language is valid
+        if self.report_language.lower() not in ['vi', 'en']:
+            self.report_language = 'vi'
 
         # Set cache file: FPT.cfg -> fpt_cache.json
         # Cache dir is at project_root/data/cache
@@ -294,6 +307,7 @@ class DCFCalculator:
             'average_fair_value': avg_fair_value,
             'cache_file': self.cache_file,
             'dcf_result': dcf_result,  # Thêm chi tiết DCF result
+            'report_language': self.report_language,  # Thêm ngôn ngữ báo cáo
         }
         
         # Generate advanced analysis
