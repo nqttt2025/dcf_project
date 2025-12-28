@@ -295,10 +295,14 @@ docker-build:
 	VERSION=$$VERSION docker-compose build 2>&1 | tee -a $$LOG_FILE; \
 	BUILD_EXIT=$$?; \
 	if [ $$BUILD_EXIT -eq 0 ]; then \
-		echo "Tagging images with version $$VERSION..." | tee -a $$LOG_FILE; \
+		echo "Tagging images with version $$VERSION and latest..." | tee -a $$LOG_FILE; \
 		for img in $(DOCKER_IMAGES); do \
 			IMAGE_NAME="$(DOCKER_IMAGE_PREFIX)-$$img"; \
-			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
+			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:$$VERSION"; then \
+				# Tag versioned image as latest for docker-up compatibility
+				docker tag $$IMAGE_NAME:$$VERSION $$IMAGE_NAME:latest 2>&1 | tee -a $$LOG_FILE || true; \
+			elif docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
+				# Fallback: tag latest as version
 				docker tag $$IMAGE_NAME:latest $$IMAGE_NAME:$$VERSION 2>&1 | tee -a $$LOG_FILE || true; \
 			fi; \
 		done; \
@@ -346,11 +350,12 @@ docker-rebuild:
 	VERSION=$$VERSION docker-compose build --no-cache 2>&1 | tee -a $$LOG_FILE; \
 	BUILD_EXIT=$$?; \
 	if [ $$BUILD_EXIT -eq 0 ]; then \
-		echo "Tagging images with version $$VERSION..." | tee -a $$LOG_FILE; \
+		echo "Tagging images with version $$VERSION and latest..." | tee -a $$LOG_FILE; \
 		for img in $(DOCKER_IMAGES); do \
 			IMAGE_NAME="$(DOCKER_IMAGE_PREFIX)-$$img"; \
-			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
-				docker tag $$IMAGE_NAME:latest $$IMAGE_NAME:$$VERSION 2>&1 | tee -a $$LOG_FILE || true; \
+			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:$$VERSION"; then \
+				# Tag versioned image as latest for docker-up compatibility
+				docker tag $$IMAGE_NAME:$$VERSION $$IMAGE_NAME:latest 2>&1 | tee -a $$LOG_FILE || true; \
 			fi; \
 		done; \
 	fi; \
@@ -372,7 +377,9 @@ docker-rebuild-auto:
 
 docker-up:
 	@echo "Starting Docker microservices..."
-	@docker-compose up -d
+	@VERSION=$$(./scripts/get_version.sh); \
+	echo "Using version: $$VERSION"; \
+	VERSION=$$VERSION docker-compose up -d
 	@echo ""
 	@echo "Microservices started:"
 	@echo "  - Frontend: http://localhost:8080"
@@ -385,7 +392,8 @@ docker-up:
 
 docker-down:
 	@echo "Stopping Docker containers..."
-	@docker-compose down
+	@VERSION=$$(./scripts/get_version.sh); \
+	VERSION=$$VERSION docker-compose down
 
 # Git tag management
 git-tag:
@@ -481,7 +489,8 @@ docker-logs-frontend:
 
 docker-restart:
 	@echo "Restarting Docker containers..."
-	@docker-compose restart
+	@VERSION=$$(./scripts/get_version.sh); \
+	VERSION=$$VERSION docker-compose restart
 
 docker-clean:
 	@mkdir -p $(DOCKER_LOG_DIR)
