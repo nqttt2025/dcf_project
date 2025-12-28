@@ -148,6 +148,12 @@ docker-versions:
 docker-version-check-base:
 	@./scripts/docker_version.sh check-base
 
+docker-build-base:
+	@./scripts/build_base.sh
+
+docker-build-base-no-cache:
+	@./scripts/build_base.sh --no-cache
+
 docker-build-auto:
 	@echo "Building with auto-tagging..."
 	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
