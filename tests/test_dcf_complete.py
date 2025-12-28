@@ -5,17 +5,26 @@ Complete DCF Calculator Module Test
 import asyncio
 import json
 import os
-from dcf_calculator import calculate_dcf_from_config
+import sys
+
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from src.core.dcf_calculator import calculate_dcf_from_config
 
 async def main():
     print("\n" + "="*80)
     print("DCF CALCULATOR MODULE - COMPLETE FUNCTIONALITY TEST")
     print("="*80)
 
+    # Get config directory path
+    config_dir = os.path.join(project_root, 'config')
+
     # Test 1: Single ticker analysis
     print("\n✓ TEST 1: Single Ticker Analysis (FPT)")
     print("-" * 80)
-    result_fpt = await calculate_dcf_from_config('FPT.cfg')
+    result_fpt = await calculate_dcf_from_config(os.path.join(config_dir, 'FPT.cfg'))
     print(f"  Ticker: {result_fpt['ticker']}")
     print(f"  Price: {result_fpt['price']:,.0f} VND")
     print(f"  DCF Fair Value: {result_fpt['dcf_fair_value']:,.2f} VND")
@@ -45,7 +54,7 @@ async def main():
     results = []
     for config in configs:
         try:
-            r = await calculate_dcf_from_config(config)
+            r = await calculate_dcf_from_config(os.path.join(config_dir, config))
             results.append(r)
             upside = ((r['average_fair_value'] - r['price']) / r['price'] * 100)
             print(f"  {r['ticker']:<5} | Price: {r['price']:>12,.0f} | DCF: {r['dcf_fair_value']:>12,.2f} | Graham: {r['graham_fair_value']:>12,.2f} | Upside: {upside:>7.1f}%")

@@ -8,10 +8,11 @@ import tempfile
 import sys
 from datetime import datetime, timezone
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
+# Add project root to path so src becomes a package
+project_root = os.path.join(os.path.dirname(__file__), '../..')
+sys.path.insert(0, project_root)
 
-from utils.cache_manager import CacheManager, get_cache_manager
+from src.utils.cache_manager import CacheManager, get_cache_manager
 # Add tests to path for test_logger
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.test_logger import logger, border

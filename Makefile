@@ -14,9 +14,10 @@ REPORT_DIR = reports
 # Default target: run all tests
 .DEFAULT_GOAL := test
 
-# Run all tests
-test: ut complete
-	@echo "All tests completed"
+# Run all tests (unit tests only - complete test may require external APIs)
+test: ut
+	@echo "Unit tests completed"
+	@echo "Note: Run 'make complete' separately for integration tests (requires external API access)"
 
 # Run unit tests
 ut:

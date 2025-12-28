@@ -9,10 +9,11 @@ import sys
 from unittest.mock import patch, MagicMock, AsyncMock
 import asyncio
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
+# Add project root to path so src becomes a package
+project_root = os.path.join(os.path.dirname(__file__), '../..')
+sys.path.insert(0, project_root)
 
-from core.dcf_calculator import DCFCalculator, calculate_dcf_from_config
+from src.core.dcf_calculator import DCFCalculator, calculate_dcf_from_config
 # Add tests to path for test_logger
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.test_logger import logger, border
@@ -188,12 +189,12 @@ class TestDCFCalculator(unittest.TestCase):
         logger.info("Negative EPS Graham test succeeded")
 
     @border
-    @patch('core.dcf_calculator.get_free_cash_flow')
-    @patch('core.dcf_calculator.get_growth_estimate')
-    @patch('core.dcf_calculator.get_shares_outstanding')
-    @patch('core.dcf_calculator.get_earnings_per_share_Diluted')
-    @patch('core.dcf_calculator.price_board_stock')
-    @patch('core.dcf_calculator.get_market_cap')
+    @patch('src.core.dcf_calculator.get_free_cash_flow')
+    @patch('src.core.dcf_calculator.get_growth_estimate')
+    @patch('src.core.dcf_calculator.get_shares_outstanding')
+    @patch('src.core.dcf_calculator.get_earnings_per_share_Diluted')
+    @patch('src.core.dcf_calculator.price_board_stock')
+    @patch('src.core.dcf_calculator.get_market_cap')
     def test_fetch_data_async(self, mock_market_cap, mock_price, mock_eps, 
                                mock_shares, mock_growth, mock_fcf):
         """Test async data fetching"""
@@ -224,12 +225,12 @@ class TestDCFCalculator(unittest.TestCase):
         logger.info("Async data fetching test succeeded")
 
     @border
-    @patch('core.dcf_calculator.get_free_cash_flow')
-    @patch('core.dcf_calculator.get_growth_estimate')
-    @patch('core.dcf_calculator.get_shares_outstanding')
-    @patch('core.dcf_calculator.get_earnings_per_share_Diluted')
-    @patch('core.dcf_calculator.price_board_stock')
-    @patch('core.dcf_calculator.get_market_cap')
+    @patch('src.core.dcf_calculator.get_free_cash_flow')
+    @patch('src.core.dcf_calculator.get_growth_estimate')
+    @patch('src.core.dcf_calculator.get_shares_outstanding')
+    @patch('src.core.dcf_calculator.get_earnings_per_share_Diluted')
+    @patch('src.core.dcf_calculator.price_board_stock')
+    @patch('src.core.dcf_calculator.get_market_cap')
     def test_calculate_full_flow(self, mock_market_cap, mock_price, mock_eps,
                                    mock_shares, mock_growth, mock_fcf):
         """Test full calculation flow"""
@@ -259,12 +260,12 @@ class TestDCFCalculator(unittest.TestCase):
         logger.info("Full calculation flow test succeeded")
 
     @border
-    @patch('core.dcf_calculator.get_free_cash_flow')
-    @patch('core.dcf_calculator.get_growth_estimate')
-    @patch('core.dcf_calculator.get_shares_outstanding')
-    @patch('core.dcf_calculator.get_earnings_per_share_Diluted')
-    @patch('core.dcf_calculator.price_board_stock')
-    @patch('core.dcf_calculator.get_market_cap')
+    @patch('src.core.dcf_calculator.get_free_cash_flow')
+    @patch('src.core.dcf_calculator.get_growth_estimate')
+    @patch('src.core.dcf_calculator.get_shares_outstanding')
+    @patch('src.core.dcf_calculator.get_earnings_per_share_Diluted')
+    @patch('src.core.dcf_calculator.price_board_stock')
+    @patch('src.core.dcf_calculator.get_market_cap')
     def test_calculate_dcf_from_config_function(self, mock_market_cap, mock_price, 
                                                   mock_eps, mock_shares, mock_growth, mock_fcf):
         """Test calculate_dcf_from_config function"""

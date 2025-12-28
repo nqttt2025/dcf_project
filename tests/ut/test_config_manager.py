@@ -7,10 +7,11 @@ import tempfile
 import configparser
 import sys
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
+# Add project root to path so src becomes a package
+project_root = os.path.join(os.path.dirname(__file__), '../..')
+sys.path.insert(0, project_root)
 
-from utils.config_manager import ConfigManager, get_config_manager
+from src.utils.config_manager import ConfigManager, get_config_manager
 # Add tests to path for test_logger
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.test_logger import logger, border
