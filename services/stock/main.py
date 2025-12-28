@@ -9,7 +9,12 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent
+# In Docker container, __file__ is /app/main.py, so we use /app directly
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    # Fallback for local development
+    project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.result_manager import get_result_manager
@@ -18,8 +23,20 @@ app = FastAPI(title="Stock Service")
 
 # Initialize managers
 result_manager = get_result_manager()
+
+# Initialize paths - ensure they exist
+project_root = Path('/app') if Path('/app').exists() else Path(__file__).parent.parent.parent
 config_dir = project_root / 'config'
 results_dir = project_root / 'data' / 'results'
+
+# Debug: Log paths on startup
+print(f"Stock Service initialized:")
+print(f"  Project root: {project_root}")
+print(f"  Config dir: {config_dir} (exists: {config_dir.exists()})")
+print(f"  Results dir: {results_dir} (exists: {results_dir.exists()})")
+if config_dir.exists():
+    config_files = list(config_dir.glob('*.cfg'))
+    print(f"  Found {len(config_files)} config files")
 
 # Track running processes
 running_processes = {}

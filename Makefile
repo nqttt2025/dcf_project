@@ -312,6 +312,17 @@ docker-build:
 	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE; \
 	exit $$BUILD_EXIT
 
+# Build with auto-tagging (creates tag automatically if not exists)
+docker-build-auto:
+	@echo "Building with auto-tagging..."
+	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+	if [ -z "$$CURRENT_VERSION" ] || [ -n "$$(git status --porcelain)" ]; then \
+		echo "No tag or uncommitted changes detected. Auto-creating tag..."; \
+		NEW_VERSION=$$(./scripts/auto_version.sh patch); \
+		echo "Created tag: $$NEW_VERSION"; \
+	fi; \
+	$(MAKE) docker-build
+
 docker-rebuild:
 	@mkdir -p $(DOCKER_LOG_DIR)
 	@VERSION=$$(./scripts/get_version.sh); \
@@ -348,6 +359,17 @@ docker-rebuild:
 	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE; \
 	exit $$BUILD_EXIT
 
+# Rebuild with auto-tagging (creates tag automatically)
+docker-rebuild-auto:
+	@echo "Rebuilding with auto-tagging..."
+	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+	if [ -z "$$CURRENT_VERSION" ] || [ -n "$$(git status --porcelain)" ]; then \
+		echo "No tag or uncommitted changes detected. Auto-creating tag..."; \
+		NEW_VERSION=$$(./scripts/auto_version.sh patch); \
+		echo "Created tag: $$NEW_VERSION"; \
+	fi; \
+	$(MAKE) docker-rebuild
+
 docker-up:
 	@echo "Starting Docker microservices..."
 	@docker-compose up -d
@@ -373,6 +395,38 @@ git-tag:
 		exit 1; \
 	fi
 	@./scripts/create_git_tag.sh $(VERSION)
+
+# Auto versioning - automatically increments version
+git-tag-auto:
+	@echo "Auto-incrementing version..."
+	@VERSION=$$(./scripts/auto_version.sh patch); \
+	echo "Created tag: $$VERSION"; \
+	echo "To push: git push origin $$VERSION"
+
+git-tag-patch:
+	@echo "Incrementing patch version..."
+	@VERSION=$$(./scripts/auto_version.sh patch); \
+	echo "Created tag: $$VERSION"; \
+	echo "To push: git push origin $$VERSION"
+
+git-tag-minor:
+	@echo "Incrementing minor version..."
+	@VERSION=$$(./scripts/auto_version.sh minor); \
+	echo "Created tag: $$VERSION"; \
+	echo "To push: git push origin $$VERSION"
+
+git-tag-major:
+	@echo "Incrementing major version..."
+	@VERSION=$$(./scripts/auto_version.sh major); \
+	echo "Created tag: $$VERSION"; \
+	echo "To push: git push origin $$VERSION"
+
+# Auto tag from commit message
+git-tag-from-commit:
+	@echo "Creating tag from commit message..."
+	@VERSION=$$(./scripts/auto_tag_from_commit.sh); \
+	echo "Created tag: $$VERSION"; \
+	echo "To push: git push origin $$VERSION"
 
 # List Docker images with versions
 docker-images:
