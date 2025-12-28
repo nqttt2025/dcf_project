@@ -286,13 +286,20 @@ class DCFCalculator:
             'market_cap': data['market_cap'],
             'eps': data['eps'],
             'shares': data['shares'],
+            'fcf': data['fcf'],  # Thêm FCF vào result
             'growth_estimate': data['ge'],
             'dcf_params': self.dcf_params,
             'dcf_fair_value': dcf_fair_value,
             'graham_fair_value': graham_fair_value,
             'average_fair_value': avg_fair_value,
             'cache_file': self.cache_file,
+            'dcf_result': dcf_result,  # Thêm chi tiết DCF result
         }
+        
+        # Generate advanced analysis
+        from .advanced_analysis import generate_advanced_analysis
+        advanced_analysis = generate_advanced_analysis(result, dcf_result)
+        result['advanced_analysis'] = advanced_analysis
 
         self.logger.info("=" * 80)
         self.logger.info("Valuation Summary")
