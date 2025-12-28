@@ -97,6 +97,50 @@ clean-data:
 clean-all: clean clean-results clean-data
 	@echo "Full cleanup completed"
 
+# DCF Analysis Scripts
+DCF_SCRIPT = run_dcf.py
+CONFIG_DIR = config
+
+# Run DCF analysis for a specific stock
+dcf:
+	@if [ -z "$(TICKER)" ]; then \
+		echo "Usage: make dcf TICKER=<ticker>"; \
+		echo "Example: make dcf TICKER=VNM"; \
+		echo "         make dcf TICKER=VCB"; \
+		echo ""; \
+		echo "Available tickers: VNM, VCB, FPT, BID, VIC, VHM, VRE, ... (all VN30 stocks)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(CONFIG_DIR)/$(TICKER).cfg" ]; then \
+		echo "Error: Config file not found: $(CONFIG_DIR)/$(TICKER).cfg"; \
+		echo "Available config files:"; \
+		ls -1 $(CONFIG_DIR)/*.cfg | sed 's|$(CONFIG_DIR)/||' | sed 's|\.cfg||' | tr '\n' ' ' && echo ""; \
+		exit 1; \
+	fi
+	@echo "Running DCF analysis for $(TICKER)..."
+	@$(PYTHON) $(DCF_SCRIPT) $(TICKER).cfg
+
+# Run DCF analysis for all VN30 stocks
+dcf-all:
+	@echo "Running DCF analysis for all VN30 stocks..."
+	@$(PYTHON) run_all_dcf_main.py
+
+# Show DCF analysis help
+dcf-help:
+	@echo "DCF Analysis Commands:"
+	@echo ""
+	@echo "  make dcf TICKER=<ticker>     - Run DCF analysis for a specific stock"
+	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks"
+	@echo "  make dcf-help                - Show this help"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make dcf TICKER=VNM"
+	@echo "  make dcf TICKER=VCB"
+	@echo "  make dcf TICKER=FPT"
+	@echo ""
+	@echo "Available tickers (VN30):"
+	@ls -1 $(CONFIG_DIR)/*.cfg 2>/dev/null | sed 's|$(CONFIG_DIR)/||' | sed 's|\.cfg||' | sort | tr '\n' ' ' && echo ""
+
 # PE Calculation Scripts
 SCRIPT_DIR = scripts
 PE_SCRIPT = $(SCRIPT_DIR)/calculate_pe.py
@@ -157,6 +201,10 @@ help:
 	@echo "  make test-result  - Run ResultManager tests"
 	@echo "  make test-dcf     - Run DCFCalculator tests"
 	@echo ""
+	@echo "  make dcf TICKER=<ticker>     - Run DCF analysis for a stock"
+	@echo "  make dcf-all                 - Run DCF analysis for all VN30 stocks"
+	@echo "  make dcf-help                - Show DCF analysis help"
+	@echo ""
 	@echo "  make pe TICKER=<ticker> [INDUSTRY=<industry>] - Calculate PE for a stock"
 	@echo "  make pe-all       - Analyze PE for all VN30 stocks"
 	@echo "  make pe-help      - Show PE calculation help"
@@ -169,5 +217,5 @@ help:
 	@echo "  make clean-all    - Clean everything including data"
 	@echo "  make help         - Show this help message"
 
-.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help pe pe-all pe-help
+.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-help pe pe-all pe-help
 
