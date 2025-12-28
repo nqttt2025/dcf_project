@@ -88,7 +88,6 @@ clean-logs:
 	@rm -rf log/*.log 2>/dev/null || true
 
 clean-results:
-	@rm -rf results/*.json results/*.text 2>/dev/null || true
 	@rm -rf data/results/*.json data/results/*.text 2>/dev/null || true
 
 clean-data:

@@ -33,7 +33,7 @@ done
 
 echo "======================================"
 echo "Analysis completed!"
-echo "Results saved in: results/"
+echo "Results saved in: data/results/"
 echo "======================================"
 
 # List generated result files

@@ -11,12 +11,12 @@ Each stock valuation creates its own log file in the `log/` directory with forma
 - `log/dcf_bid.log` - All logs related to BID analysis
 
 ### 2. Results Management
-Each stock valuation saves its results in the `results/` directory with format: `{stock_name}_result.json`
+Each stock valuation saves its results in the `data/results/` directory with format: `{stock_name}_result.json`
 
 **Example Result Files:**
-- `results/fpt_result.json` - Complete FPT valuation results
-- `results/vnm_result.json` - Complete VNM valuation results
-- `results/bid_result.json` - Complete BID valuation results
+- `data/results/fpt_result.json` - Complete FPT valuation results
+- `data/results/vnm_result.json` - Complete VNM valuation results
+- `data/results/bid_result.json` - Complete BID valuation results
 
 ---
 
@@ -30,12 +30,13 @@ dcf_project/
 │   ├── dcf_vnm.log           (VNM-specific logs) ← NEW
 │   └── dcf_bid.log           (BID-specific logs) ← NEW
 │
-├── results/                  (← NEW DIRECTORY)
-│   ├── fpt_result.json       (FPT results)
-│   ├── vnm_result.json       (VNM results)
-│   └── bid_result.json       (BID results)
-│
 ├── data/
+│   └── results/              (← RESULTS DIRECTORY)
+│       ├── fpt_result.json   (FPT results)
+│       ├── vnm_result.json   (VNM results)
+│       └── bid_result.json   (BID results)
+│
+│   ├── cache/
 │   ├── fpt_cache.json
 │   ├── vnm_cache.json
 │   └── bid_cache.json
@@ -72,11 +73,11 @@ rm = get_result_manager()
 
 # Save results
 result_file = rm.save_result('FPT', valuation_dict)
-# → saves to results/fpt_result.json
+# → saves to data/results/fpt_result.json
 
 # Load results
 result = rm.load_result('FPT')
-# → loads from results/fpt_result.json
+# → loads from data/results/fpt_result.json
 
 # List all results
 all_results = rm.list_results()
@@ -97,7 +98,7 @@ result = await calculate_dcf_from_config("FPT.cfg")
 
 # New field in result dictionary:
 print(result['result_file'])
-# → /home/eenitug/dcf_project/results/fpt_result.json
+# → /home/eenitug/dcf_project/data/results/fpt_result.json
 ```
 
 ---
@@ -204,7 +205,7 @@ asyncio.run(main())
 ## 📂 File Sizes
 
 - `log/dcf_fpt.log` - ~2.1K (per-stock log)
-- `results/fpt_result.json` - ~520 bytes (valuation result)
+- `data/results/fpt_result.json` - ~520 bytes (valuation result)
 - Total per stock: ~2.6K
 
 ---

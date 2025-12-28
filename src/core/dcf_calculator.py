@@ -252,7 +252,7 @@ class DCFCalculator:
                     'graham_fair_value': 42674.55,
                     'average_fair_value': 43440.34,
                     'cache_file': 'data/fpt_cache.json',
-                    'result_file': 'results/fpt_result.json'
+                    'result_file': 'data/results/fpt_result.json'
                 }
         """
         self.logger.info("=" * 80)

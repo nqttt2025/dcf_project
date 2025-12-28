@@ -42,6 +42,8 @@ dcf_project/
 │       ├── bid_result.text
 │       ├── fpt_result.json
 │       ├── fpt_result.text
+│       ├── vcb_result.json
+│       ├── vcb_result.text
 │       ├── vnm_result.json
 │       └── vnm_result.text
 │
