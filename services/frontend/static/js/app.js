@@ -48,6 +48,12 @@ async function loadStocks() {
 
 // Run DCF analysis for a stock
 async function runDCFAnalysis(ticker) {
+    // Disable button immediately
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '⏳ Đang khởi động...';
+    
     try {
         const response = await fetch(`/api/stocks/${ticker}/run`, {
             method: 'POST',
@@ -58,12 +64,19 @@ async function runDCFAnalysis(ticker) {
         
         if (!response.ok) {
             const error = await response.json();
+            button.disabled = false;
+            button.innerHTML = originalText;
             alert(`Lỗi: ${error.detail || 'Không thể chạy phân tích DCF'}`);
             return;
         }
         
         const result = await response.json();
-        alert(`Đã bắt đầu phân tích DCF cho ${ticker}`);
+        
+        // Update button state
+        button.innerHTML = '🔄 Đang chạy...';
+        
+        // Show notification
+        showNotification(`Đã bắt đầu phân tích DCF cho ${ticker}`, 'success');
         
         // Reload stocks to update status
         loadStocks();
@@ -72,13 +85,15 @@ async function runDCFAnalysis(ticker) {
         pollStockStatus(ticker);
     } catch (error) {
         console.error('Error running DCF analysis:', error);
-        alert(`Lỗi khi chạy phân tích DCF: ${error.message}`);
+        button.disabled = false;
+        button.innerHTML = originalText;
+        showNotification(`Lỗi khi chạy phân tích DCF: ${error.message}`, 'error');
     }
 }
 
 // Poll stock status until analysis completes
 async function pollStockStatus(ticker) {
-    const maxAttempts = 60; // 5 minutes max (5s * 60)
+    const maxAttempts = 120; // 10 minutes max (5s * 120)
     let attempts = 0;
     
     const poll = async () => {
@@ -89,6 +104,7 @@ async function pollStockStatus(ticker) {
             if (!status.is_running) {
                 // Analysis completed, reload stocks
                 loadStocks();
+                showNotification(`Phân tích DCF hoàn tất cho ${ticker}`, 'success');
                 return;
             }
             
@@ -97,6 +113,7 @@ async function pollStockStatus(ticker) {
                 setTimeout(poll, 5000); // Poll every 5 seconds
             } else {
                 console.warn(`Polling timeout for ${ticker}`);
+                showNotification(`Phân tích DCF cho ${ticker} đang mất nhiều thời gian...`, 'warning');
             }
         } catch (error) {
             console.error('Error polling status:', error);
@@ -104,6 +121,29 @@ async function pollStockStatus(ticker) {
     };
     
     setTimeout(poll, 5000); // Start polling after 5 seconds
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existing = document.querySelectorAll('.notification');
+    existing.forEach(n => n.remove());
+    
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Add to body
+    document.body.appendChild(notification);
+    
+    // Show with animation
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
 }
 
 // Render stocks grid
@@ -166,6 +206,15 @@ function renderStocks() {
                         Chưa có dữ liệu phân tích
                     </div>
                 `}
+                
+                ${stock.is_running ? `
+                    <div class="progress-container">
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" style="width: ${stock.progress_percent || 0}%"></div>
+                        </div>
+                        <div class="progress-text">${stock.progress || 'Đang xử lý...'} (${Math.round(stock.progress_percent || 0)}%)</div>
+                    </div>
+                ` : ''}
                 
                 <div class="stock-actions">
                     <button class="btn-run-dcf" onclick="event.stopPropagation(); runDCFAnalysis('${stock.ticker}')" 

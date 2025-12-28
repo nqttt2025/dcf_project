@@ -402,21 +402,42 @@ def get_shares_outstanding(ticker):
                 return shares_count
 
         # Alternative column names to check
-        alt_names = [
+        # Note: 'Paid-in capital (Bn. VND)' is also in VND (not billions), same as 'Common shares'
+        # Need to divide by par_value (10,000) to get number of shares
+        alt_names_capital = [
             'Paid-in capital (Bn. VND)',
-            'Capital and reserves (Bn. VND)',
+        ]
+        
+        # Check for capital columns that need conversion
+        for col_name in alt_names_capital:
+            if col_name in latest_row.index:
+                capital_value = latest_row[col_name]
+                capital_valid = (HAS_PANDAS and pd.notna(capital_value)) or (not HAS_PANDAS and capital_value is not None)
+                if capital_valid and capital_value > 0:
+                    # Convert from capital (VND) to number of shares
+                    # Par value (mệnh giá) is typically 10,000 VND per share
+                    par_value = 10000
+                    shares_count = float(capital_value) / par_value
+                    logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from {col_name} {capital_value:,.0f} VND, par_value {par_value:,} VND)")
+                    cache_manager.set_with_timestamp(ticker, "shares", shares_count)
+                    return shares_count
+        
+        # Check for direct shares outstanding (already in number of shares)
+        alt_names_shares = [
             'Shares Outstanding'
         ]
-
-        for col_name in alt_names:
+        
+        for col_name in alt_names_shares:
             if col_name in latest_row.index:
                 shares = latest_row[col_name]
                 shares_valid = (HAS_PANDAS and pd.notna(shares)) or (not HAS_PANDAS and shares is not None)
                 if shares_valid and shares > 0:
-                    logger.info(f"Fetched shares outstanding for {ticker}: {shares:,.0f}")
+                    logger.info(f"Fetched shares outstanding for {ticker}: {shares:,.0f} (direct from {col_name})")
                     shares_value = float(shares)
                     cache_manager.set_with_timestamp(ticker, "shares", shares_value)
                     return shares_value
+        
+        # 'Capital and reserves' is total equity, not shares - skip it
 
         logger.warning(f"Could not find shares outstanding in balance sheet data")
         raise Exception("Shares outstanding not found in data")

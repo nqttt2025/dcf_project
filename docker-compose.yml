@@ -10,6 +10,24 @@ version: '3.8'
 # - Parallel builds for multiple services
 
 services:
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: dcf-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
   # Base image with common dependencies (built first, cached for other services)
   base:
     build:
@@ -36,8 +54,10 @@ services:
     environment:
       - DCF_SERVICE_URL=http://dcf:8001
       - STOCK_SERVICE_URL=http://stock:8002
+      - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
     depends_on:
+      - redis
       - dcf
       - stock
     networks:
@@ -63,7 +83,10 @@ services:
       - "8001:8001"
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
+    depends_on:
+      - redis
     volumes:
       - ./data:/app/data
       - ./config:/app/config
@@ -91,7 +114,10 @@ services:
       - "8002:8002"
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
+    depends_on:
+      - redis
     volumes:
       - ./data:/app/data
       - ./config:/app/config
@@ -134,4 +160,6 @@ networks:
 
 volumes:
   dcf-data:
+    driver: local
+  redis-data:
     driver: local

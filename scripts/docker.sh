@@ -43,14 +43,27 @@ docker_build_images() {
         log_to_file "$log_file" "Building base image (version: $base_version)..."
         BASE_VERSION="$base_version" docker-compose build base 2>&1 | tee -a "$log_file" || true
         
-        # Tag base image
-        docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        # Tag base image with both version and latest
+        if docker_image_exists "dcf-project-base" "latest"; then
+            docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        fi
         
         # Update hash after successful build
         "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
     else
         log_to_file "$log_file" "Base image unchanged (version: $base_version), using cached version"
-        # Ensure base image is tagged correctly
+        # Ensure base image is tagged correctly (both version and latest)
+        if docker_image_exists "dcf-project-base" "latest"; then
+            docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        elif docker_image_exists "dcf-project-base" "$base_version"; then
+            docker tag "dcf-project-base:$base_version" "dcf-project-base:latest" 2>&1 | tee -a "$log_file" || true
+        fi
+    fi
+    
+    # Ensure base image exists before building services
+    if ! docker_image_exists "dcf-project-base" "latest"; then
+        log_error "Base image not found! Building base image first..."
+        BASE_VERSION="$base_version" docker-compose build base 2>&1 | tee -a "$log_file" || true
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
         fi

@@ -49,28 +49,42 @@ if config_dir.exists():
 running_processes = {}
 
 def sync_running_status():
-    """Sync running status with DCF service"""
-    if not HAS_HTTPX:
-        return
-    
+    """Sync running status with Redis"""
     try:
-        dcf_service_url = os.getenv('DCF_SERVICE_URL', 'http://dcf:8001')
-        response = httpx.get(f"{dcf_service_url}/status", timeout=5.0)
-        if response.status_code == 200:
-            dcf_status = response.json()
-            # Update running_processes from DCF service
-            for ticker, analysis_info in dcf_status.get('analyses', {}).items():
-                if analysis_info.get('status') == 'running':
-                    running_processes[ticker] = {
-                        'status': 'running',
-                        'started_at': analysis_info.get('started_at')
-                    }
-                elif analysis_info.get('status') in ['completed', 'failed']:
-                    # Remove from running if completed or failed
-                    running_processes.pop(ticker, None)
+        # Try Redis first
+        from src.utils.redis_client import get_redis_client
+        redis_client = get_redis_client()
+        redis_analyses = redis_client.get_all_running_analyses()
+        
+        # Update running_processes from Redis
+        running_processes.clear()
+        for ticker, analysis_info in redis_analyses.items():
+            if analysis_info.get('status') in ['running', 'processing']:
+                running_processes[ticker] = {
+                    'status': analysis_info.get('status'),
+                    'started_at': analysis_info.get('started_at'),
+                    'progress': analysis_info.get('progress'),
+                    'progress_percent': analysis_info.get('progress_percent')
+                }
     except Exception as e:
-        # Silently fail - DCF service might not be available
-        pass
+        # Fallback to HTTP sync if Redis fails
+        if HAS_HTTPX:
+            try:
+                dcf_service_url = os.getenv('DCF_SERVICE_URL', 'http://dcf:8001')
+                response = httpx.get(f"{dcf_service_url}/status", timeout=5.0)
+                if response.status_code == 200:
+                    dcf_status = response.json()
+                    # Update running_processes from DCF service
+                    for ticker, analysis_info in dcf_status.get('analyses', {}).items():
+                        if analysis_info.get('status') in ['running', 'processing']:
+                            running_processes[ticker] = {
+                                'status': analysis_info.get('status'),
+                                'started_at': analysis_info.get('started_at'),
+                                'progress': analysis_info.get('progress'),
+                                'progress_percent': analysis_info.get('progress_percent')
+                            }
+            except:
+                pass
 
 @app.get("/")
 def root():
@@ -113,11 +127,14 @@ def list_stocks():
         
         # Check if running
         is_running = ticker in running_processes
+        running_info = running_processes.get(ticker, {})
         
         stock_info = {
             'ticker': ticker,
             'has_result': has_result,
             'is_running': is_running,
+            'progress': running_info.get('progress'),
+            'progress_percent': running_info.get('progress_percent', 0),
             'current_price': result_data.get('price') if result_data else None,
             'dcf_fair_value': result_data.get('dcf_fair_value') if result_data else None,
             'graham_fair_value': result_data.get('graham_fair_value') if result_data else None,

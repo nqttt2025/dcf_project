@@ -265,7 +265,7 @@ class DCFCalculator:
         except Exception as e:
             self.logger.error(f"Error saving cache: {e}")
 
-    async def calculate(self):
+    async def calculate(self, progress_callback=None):
         """
         Main calculation method - Tính toán DCF và Graham valuation
 
@@ -290,14 +290,23 @@ class DCFCalculator:
         self.logger.info(f"DCF Analysis for {self.ticker}")
         self.logger.info("=" * 80)
 
+        if progress_callback:
+            progress_callback(5.0, "Initializing calculation...")
+
         # Fetch data
+        if progress_callback:
+            progress_callback(15.0, "Fetching financial data...")
         data = await self.fetch_data_async()
 
         # Calculate DCF
+        if progress_callback:
+            progress_callback(50.0, "Calculating DCF valuation...")
         dcf_result = self.calculate_dcf(data)
         dcf_fair_value = dcf_result['fair_value']
 
         # Calculate Graham
+        if progress_callback:
+            progress_callback(70.0, "Calculating Graham valuation...")
         graham_result = self.calculate_graham(data)
         graham_fair_value = graham_result['fair_value'] if graham_result else None
 
@@ -326,6 +335,8 @@ class DCFCalculator:
         }
         
         # Generate advanced analysis
+        if progress_callback:
+            progress_callback(85.0, "Generating advanced analysis...")
         from .advanced_analysis import generate_advanced_analysis
         advanced_analysis = generate_advanced_analysis(result, dcf_result)
         result['advanced_analysis'] = advanced_analysis
@@ -344,14 +355,19 @@ class DCFCalculator:
         self._save_cache(data)
 
         # Save result to results directory
-        result_file = self.result_manager.save_result(self.ticker, result)
+        if progress_callback:
+            progress_callback(95.0, "Saving results...")
+        result_file = self.result_manager.save_result(self.ticker, result, self.report_language)
         result['result_file'] = result_file
         self.logger.info(f"Result saved to {result_file}")
+
+        if progress_callback:
+            progress_callback(100.0, "Analysis completed!")
 
         return result
 
 
-async def calculate_dcf_from_config(config_file):
+async def calculate_dcf_from_config(config_file, progress_callback=None):
     """
     Main function - Tính DCF từ config file
 
@@ -367,7 +383,7 @@ async def calculate_dcf_from_config(config_file):
         print(f"Cache saved to: {result['cache_file']}")
     """
     calculator = DCFCalculator(config_file)
-    result = await calculator.calculate()
+    result = await calculator.calculate(progress_callback=progress_callback)
     return result
 
 

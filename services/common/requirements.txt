@@ -7,4 +7,5 @@ pandas==2.1.4
 lxml==5.1.0
 cloudscraper==1.2.71
 vnstock>=0.2.6
+redis==5.0.1
 

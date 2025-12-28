@@ -1,10 +1,9 @@
 # Base image with common dependencies
 # This image is cached and reused by all services
 # Version is managed via docker-versions.json
-ARG BASE_VERSION=latest
 FROM python:3.11-slim
 
-ARG BASE_VERSION
+ARG BASE_VERSION=latest
 LABEL base_version="${BASE_VERSION}"
 LABEL maintainer="DCF Project"
 

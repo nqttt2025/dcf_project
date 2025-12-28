@@ -1,10 +1,10 @@
-# Build argument for version
-ARG VERSION=latest
-ENV APP_VERSION=${VERSION}
-
 # Use base image with common dependencies
 # Base image must be built first: docker-compose build base
 FROM dcf-project-base:latest
+
+# Build argument for version
+ARG VERSION=latest
+ENV APP_VERSION=${VERSION}
 
 WORKDIR /app
 

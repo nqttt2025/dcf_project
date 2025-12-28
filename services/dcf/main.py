@@ -21,16 +21,15 @@ sys.path.insert(0, str(project_root))
 
 from src.core.dcf_calculator import calculate_dcf_from_config
 from src.utils.result_manager import get_result_manager
+from src.utils.redis_client import get_redis_client
 
 app = FastAPI(title="DCF Analysis Service")
 
 # Initialize managers
 result_manager = get_result_manager()
+redis_client = get_redis_client()
 config_dir = project_root / 'config'
 results_dir = project_root / 'data' / 'results'
-
-# Track running analyses
-running_analyses = {}
 
 class AnalysisRequest(BaseModel):
     ticker: str
@@ -51,8 +50,9 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
     """Chạy phân tích DCF cho một cổ phiếu"""
     ticker = ticker.upper()
     
-    # Check if already running
-    if ticker in running_analyses:
+    # Check if already running (from Redis)
+    existing_status = redis_client.get_analysis_status(ticker)
+    if existing_status and existing_status.get('status') in ['running', 'processing']:
         raise HTTPException(status_code=400, detail=f'Analysis already running for {ticker}')
     
     # Check if config exists
@@ -60,14 +60,18 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
     if not config_file.exists():
         raise HTTPException(status_code=404, detail=f'Config file not found for {ticker}')
     
-    # Mark as running
-    running_analyses[ticker] = {
-        'started_at': datetime.now().isoformat(),
-        'status': 'running'
-    }
+    # Mark as running in Redis
+    started_at = datetime.now().isoformat()
+    redis_client.set_analysis_status(
+        ticker,
+        'running',
+        progress='Initializing...',
+        progress_percent=0.0,
+        started_at=started_at
+    )
     
     # Run analysis in background
-    background_tasks.add_task(perform_analysis, ticker, str(config_file))
+    background_tasks.add_task(perform_analysis, ticker, str(config_file), started_at)
     
     return {
         'message': f'Analysis started for {ticker}',
@@ -75,55 +79,71 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
         'status': 'running'
     }
 
-async def perform_analysis(ticker: str, config_file: str):
-    """Perform DCF analysis"""
+async def perform_analysis(ticker: str, config_file: str, started_at: str):
+    """Perform DCF analysis with progress tracking"""
     try:
         # Update status to processing
-        running_analyses[ticker]['status'] = 'processing'
-        running_analyses[ticker]['progress'] = 'Fetching data...'
+        redis_client.set_analysis_status(
+            ticker,
+            'processing',
+            progress='Fetching financial data...',
+            progress_percent=10.0,
+            started_at=started_at
+        )
         
-        # Run DCF calculation
-        result = await calculate_dcf_from_config(config_file)
+        # Run DCF calculation with progress callbacks
+        result = await calculate_dcf_from_config(config_file, progress_callback=lambda p, msg: 
+            redis_client.set_analysis_status(
+                ticker,
+                'processing',
+                progress=msg,
+                progress_percent=p,
+                started_at=started_at
+            )
+        )
         
         # Mark as completed
-        running_analyses[ticker] = {
-            'started_at': running_analyses[ticker]['started_at'],
-            'completed_at': datetime.now().isoformat(),
-            'status': 'completed',
-            'result': result
-        }
+        redis_client.set_analysis_status(
+            ticker,
+            'completed',
+            progress='Analysis completed',
+            progress_percent=100.0,
+            started_at=started_at,
+            completed_at=datetime.now().isoformat(),
+            result=result
+        )
         
-        # Remove from running after 5 minutes (cleanup)
-        import asyncio
+        # Remove from Redis after 5 minutes (cleanup)
         await asyncio.sleep(300)  # 5 minutes
-        if ticker in running_analyses and running_analyses[ticker]['status'] == 'completed':
-            running_analyses.pop(ticker, None)
+        redis_client.delete_analysis_status(ticker)
     except Exception as e:
         # Mark as failed
-        running_analyses[ticker] = {
-            'started_at': running_analyses[ticker]['started_at'],
-            'failed_at': datetime.now().isoformat(),
-            'status': 'failed',
-            'error': str(e)
-        }
+        redis_client.set_analysis_status(
+            ticker,
+            'failed',
+            progress=f'Error: {str(e)}',
+            progress_percent=0.0,
+            started_at=started_at,
+            failed_at=datetime.now().isoformat(),
+            error=str(e)
+        )
         
-        # Remove from running after 1 minute (cleanup)
-        import asyncio
+        # Remove from Redis after 1 minute (cleanup)
         await asyncio.sleep(60)  # 1 minute
-        if ticker in running_analyses and running_analyses[ticker]['status'] == 'failed':
-            running_analyses.pop(ticker, None)
+        redis_client.delete_analysis_status(ticker)
 
 @app.get("/analysis/{ticker}")
 def get_analysis_result(ticker: str):
     """Lấy kết quả phân tích DCF"""
     ticker = ticker.upper()
     
-    # Check if running
-    if ticker in running_analyses:
+    # Check Redis first
+    redis_status = redis_client.get_analysis_status(ticker)
+    if redis_status:
         return {
             'ticker': ticker,
-            'status': running_analyses[ticker]['status'],
-            'analysis': running_analyses[ticker]
+            'status': redis_status.get('status'),
+            'analysis': redis_status
         }
     
     # Check if result exists in file
@@ -146,6 +166,7 @@ def get_analysis_result(ticker: str):
 @app.get("/status")
 def get_service_status():
     """Lấy trạng thái của service"""
+    running_analyses = redis_client.get_all_running_analyses()
     return {
         'status': 'healthy',
         'running_analyses': len(running_analyses),
