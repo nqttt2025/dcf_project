@@ -98,6 +98,50 @@ clean-data:
 clean-all: clean clean-results clean-data
 	@echo "Full cleanup completed"
 
+# PE Calculation Scripts
+SCRIPT_DIR = scripts
+PE_SCRIPT = $(SCRIPT_DIR)/calculate_pe.py
+
+# Calculate PE for a specific ticker
+pe:
+	@if [ -z "$(TICKER)" ]; then \
+		echo "Usage: make pe TICKER=<ticker> [INDUSTRY=<industry>]"; \
+		echo "Example: make pe TICKER=VNM INDUSTRY=consumer"; \
+		echo ""; \
+		echo "Available industries: banking, real_estate, technology, consumer, energy, industrial, aviation"; \
+		exit 1; \
+	fi
+	@echo "Calculating PE for $(TICKER)..."
+	@$(PYTHON) $(PE_SCRIPT) $(TICKER) $(INDUSTRY) || true
+
+# Analyze PE for all VN30 stocks
+pe-all:
+	@echo "Analyzing PE for all VN30 stocks..."
+	@$(PYTHON) $(PE_SCRIPT)
+
+# Show PE calculation help
+pe-help:
+	@echo "PE Calculation Commands:"
+	@echo ""
+	@echo "  make pe TICKER=<ticker>              - Calculate PE for a specific stock"
+	@echo "  make pe TICKER=<ticker> INDUSTRY=<industry> - Calculate PE with industry suggestion"
+	@echo "  make pe-all                          - Analyze all VN30 stocks"
+	@echo "  make pe-help                         - Show this help"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make pe TICKER=VNM"
+	@echo "  make pe TICKER=VCB INDUSTRY=banking"
+	@echo "  make pe TICKER=FPT INDUSTRY=technology"
+	@echo ""
+	@echo "Available industries:"
+	@echo "  - banking      (Ngân hàng)"
+	@echo "  - real_estate  (Bất động sản)"
+	@echo "  - technology   (Công nghệ)"
+	@echo "  - consumer     (Tiêu dùng)"
+	@echo "  - energy       (Năng lượng)"
+	@echo "  - industrial   (Công nghiệp)"
+	@echo "  - aviation     (Hàng không)"
+
 # Help target
 help:
 	@echo "DCF Project Makefile"
@@ -114,6 +158,10 @@ help:
 	@echo "  make test-result  - Run ResultManager tests"
 	@echo "  make test-dcf     - Run DCFCalculator tests"
 	@echo ""
+	@echo "  make pe TICKER=<ticker> [INDUSTRY=<industry>] - Calculate PE for a stock"
+	@echo "  make pe-all       - Analyze PE for all VN30 stocks"
+	@echo "  make pe-help      - Show PE calculation help"
+	@echo ""
 	@echo "  make lint         - Run all linters"
 	@echo "  make pylint       - Run pylint"
 	@echo "  make flake8       - Run flake8"
@@ -122,5 +170,5 @@ help:
 	@echo "  make clean-all    - Clean everything including data"
 	@echo "  make help         - Show this help message"
 
-.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help
+.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help pe pe-all pe-help
 
