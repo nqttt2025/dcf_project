@@ -11,13 +11,14 @@ from pathlib import Path
 class ResultManager:
     """
     Quản lý lưu trữ kết quả DCF valuation
-    Format: results/{stock_name}_result.json
-           {project_root}/{stock_name}.text
+    Format: data/results/{stock_name}_result.json
+            data/results/{stock_name}_result.text
     """
 
     def __init__(self):
-        self.project_root = os.path.dirname(os.path.abspath(__file__))
-        self.results_dir = os.path.join(self.project_root, 'results')
+        # Get project root (go up 2 levels from src/utils/)
+        self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.results_dir = os.path.join(self.project_root, 'data', 'results')
         os.makedirs(self.results_dir, exist_ok=True)
 
     def save_result(self, stock_name, valuation_result):

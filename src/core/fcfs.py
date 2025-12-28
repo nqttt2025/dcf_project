@@ -10,8 +10,8 @@ import os
 import sys
 from io import StringIO
 from datetime import datetime
-from logger import get_logger
-from cache_manager import get_cache_manager
+from ..utils.logger import get_logger
+from ..utils.cache_manager import get_cache_manager
 
 try:
     old_stdout = sys.stdout

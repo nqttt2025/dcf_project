@@ -1,34 +1,35 @@
 #!/usr/bin/env python3
 """
 Script to run DCF analysis for all stocks
-Automatically discovers all .cfg files in the database folder and runs analysis
+Automatically discovers all .cfg files in the config folder and runs analysis
 """
 
 import asyncio
 import os
 import sys
 from pathlib import Path
-from dcf_calculator import calculate_dcf_from_config
-from logger import get_logger
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.core.dcf_calculator import calculate_dcf_from_config
+from src.utils.logger import get_logger
 
 logger = get_logger()
 
 
-def discover_config_files(database_dir='database'):
+def discover_config_files(config_dir='config'):
     """
-    Discover all .cfg files in database directory
+    Discover all .cfg files in config directory
     
     Args:
-        database_dir: Path to database directory
+        config_dir: Path to config directory
     
     Returns:
         List of config file paths
     """
     config_files = []
-    db_path = Path(database_dir)
+    db_path = Path(config_dir)
     
     if not db_path.exists():
-        logger.warning(f"Database directory not found: {database_dir}")
+        logger.warning(f"Config directory not found: {config_dir}")
         return config_files
     
     # Find all .cfg files
@@ -59,7 +60,7 @@ async def analyze_all_stocks(config_files):
     for config_file in config_files:
         try:
             logger.info(f"\nProcessing: {config_file}")
-            result = await calculate_dcf_from_config(f'database/{config_file}')
+            result = await calculate_dcf_from_config(f'config/{config_file}')
             results.append(result)
             logger.info(f"✓ {result['ticker']}: DCF Fair Value = {result['dcf_fair_value']:,.2f}")
         except Exception as e:
@@ -117,10 +118,10 @@ async def main():
     logger.info("=" * 100)
 
     # Discover config files
-    config_files = discover_config_files('database')
+    config_files = discover_config_files('config')
     
     if not config_files:
-        logger.error("No config files found in database directory!")
+        logger.error("No config files found in config directory!")
         sys.exit(1)
     
     logger.info(f"Found {len(config_files)} config file(s): {', '.join(config_files)}")

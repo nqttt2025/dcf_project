@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime, timezone
-from logger import get_logger
+from .logger import get_logger
 
 logger = get_logger()
 

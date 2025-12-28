@@ -21,7 +21,7 @@ except:
     sys.stdout = old_stdout
     sys.stderr = old_stderr
 
-from cache_manager import get_cache_manager
+from ..utils.cache_manager import get_cache_manager
 
 cache_manager = get_cache_manager()
 

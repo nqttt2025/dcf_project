@@ -10,16 +10,16 @@ Ví dụ:
 import asyncio
 import os
 from pathlib import Path
-from fcfs import (
+from .fcfs import (
     get_free_cash_flow,
     get_shares_outstanding,
     get_earnings_per_share_Diluted,
     price_board_stock,
     get_market_cap
 )
-from ge import get_growth_estimate
-from logger import get_logger, get_stock_logger
-from result_manager import get_result_manager
+from .ge import get_growth_estimate
+from ..utils.logger import get_logger, get_stock_logger
+from ..utils.result_manager import get_result_manager
 import configparser
 import json
 from datetime import datetime, timezone
@@ -97,7 +97,9 @@ class DCFCalculator:
         }
 
         # Set cache file: FPT.cfg -> fpt_cache.json
-        cache_dir = os.path.join(os.path.dirname(__file__), 'data')
+        # Cache dir is at project_root/data/cache
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        cache_dir = os.path.join(project_root, 'data', 'cache')
         os.makedirs(cache_dir, exist_ok=True)
         cache_name = f"{Path(self.config_file).stem.lower()}_cache.json"
         self.cache_file = os.path.join(cache_dir, cache_name)

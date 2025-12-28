@@ -1,6 +1,6 @@
 {
   "ticker": "FPT",
-  "config_file": "/home/eenitug/dcf_project/database/FPT.cfg",
+  "config_file": "database/DCF.cfg",
   "price": 92500.0,
   "market_cap": 157574408692500.0,
   "eps": 1429.310981278839,
@@ -14,7 +14,7 @@
   "dcf_fair_value": 44206.133878762084,
   "graham_fair_value": 42674.547807448034,
   "average_fair_value": 43440.34084310506,
-  "cache_file": "/home/eenitug/dcf_project/data/fpt_cache.json",
-  "saved_at": "2025-12-27 19:28:44 UTC",
+  "cache_file": "/home/eenitug/dcf_project/data/dcf_cache.json",
+  "saved_at": "2025-12-28 13:21:01 UTC",
   "stock_name": "FPT"
 }
