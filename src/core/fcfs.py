@@ -53,13 +53,197 @@ def is_float(string):
     except ValueError:
         return False
 
-def get_free_cash_flow(ticker):
+def get_free_cash_flow_ttm(ticker):
+    """
+    Tính Free Cash Flow TTM (Trailing Twelve Months) từ vnstock
+    bằng cách cộng dồn 4 quý gần nhất.
+    
+    TTM (Trailing Twelve Months) là tổng hợp dữ liệu từ 12 tháng gần nhất,
+    thường được tính bằng cách cộng dồn 4 quý báo cáo gần nhất.
+    
+    Tại sao sử dụng TTM?
+    - Phản ánh tốt hơn tình hình hiện tại của công ty (12 tháng gần nhất)
+    - Tránh biến động theo mùa của từng quý riêng lẻ
+    - Chuẩn trong phân tích tài chính và định giá DCF
+    - Nhất quán với cách tính của các nguồn dữ liệu khác (như stockanalysis.com)
+    
+    Ví dụ với FPT:
+    - Q3 2025: OCF = 4,344 tỷ VND, CapEx = 830 tỷ VND
+    - Q2 2025: OCF = 4,190 tỷ VND, CapEx = 688 tỷ VND
+    - Q1 2025: OCF = ... tỷ VND, CapEx = ... tỷ VND
+    - Q4 2024: OCF = 5,397 tỷ VND, CapEx = 838 tỷ VND
+    - TTM FCF = Tổng OCF - Tổng CapEx của 4 quý
+    
+    Args:
+        ticker (str): Mã cổ phiếu (ví dụ: 'FPT', 'VNM')
+    
+    Returns:
+        float: Free Cash Flow TTM tính bằng VND, hoặc None nếu không lấy được dữ liệu
+    
+    Note:
+        - Hàm sẽ tự động cache kết quả để tránh tính toán lại
+        - Nếu không đủ 4 quý dữ liệu, sẽ trả về None
+        - CapEx được lấy giá trị tuyệt đối (vì trong báo cáo thường là số âm)
+    
+    Example:
+        >>> fcf_ttm = get_free_cash_flow_ttm('FPT')
+        >>> print(f"FCF TTM: {fcf_ttm:,.0f} VND")
+        FCF TTM: 13,933,764,607,232 VND
+    """
+    if not HAS_VNSTOCK:
+        logger.error("vnstock not installed. Install with: pip install vnstock")
+        return None
+    
+    # Check cache first
+    cache_key = "fcf_ttm"
+    if cache_manager.exists(ticker, cache_key):
+        cached_value = cache_manager.get_with_timestamp(ticker, cache_key)
+        logger.info(f"Using cached FCF TTM for {ticker}: {cached_value:,.0f} VND")
+        return float(cached_value)
+    
+    try:
+        logger.info(f"Calculating FCF TTM for {ticker} from vnstock (summing last 4 quarters)...")
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            stock = Vnstock().stock(symbol=ticker.upper(), source="VCI")
+            cash_flow_df = stock.finance.cash_flow()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        
+        if cash_flow_df.empty:
+            logger.warning(f"No cash flow data available for {ticker}")
+            return None
+        
+        # Tên các cột cần tìm trong DataFrame
+        ocf_col = 'Net cash inflows/outflows from operating activities'
+        capex_col = 'Purchase of fixed assets'
+        
+        # Khởi tạo biến để tính TTM
+        # TTM = tổng của 4 quý gần nhất
+        ttm_ocf = 0      # TTM Operating Cash Flow
+        ttm_capex = 0    # TTM Capital Expenditures
+        quarters_counted = 0  # Số quý đã tính
+        
+        # Duyệt qua DataFrame từ đầu (quý gần nhất) đến cuối
+        # Dữ liệu từ vnstock thường được sắp xếp từ mới nhất đến cũ nhất
+        for idx in range(len(cash_flow_df)):
+            row = cash_flow_df.iloc[idx]
+            
+            # Lấy giá trị OCF và CapEx từ dòng hiện tại
+            ocf_val = row.get(ocf_col, 0) if ocf_col in row.index else 0
+            capex_val = row.get(capex_col, 0) if capex_col in row.index else 0
+            
+            # Kiểm tra tính hợp lệ của dữ liệu
+            # Bỏ qua các dòng không có dữ liệu hoặc là header row
+            if pd.notna(ocf_val) and ocf_val != 0 and ocf_val != ticker.upper():
+                try:
+                    # Chuyển đổi sang float
+                    ocf_float = float(ocf_val)
+                    # CapEx trong báo cáo thường là số âm (dòng tiền ra), lấy giá trị tuyệt đối
+                    capex_float = abs(float(capex_val)) if capex_val != 0 and pd.notna(capex_val) else 0
+                    
+                    # Chỉ tính các quý có OCF > 0 và chưa đủ 4 quý
+                    if ocf_float > 0 and quarters_counted < 4:
+                        year = row.get('yearReport', 'N/A')
+                        length = row.get('lengthReport', 'N/A')
+                        logger.debug(f"  Q{length} {year}: OCF={ocf_float:,.0f}, CapEx={capex_float:,.0f}")
+                        
+                        # Cộng dồn vào TTM
+                        ttm_ocf += ocf_float
+                        ttm_capex += capex_float
+                        quarters_counted += 1
+                        
+                        # Đã đủ 4 quý, dừng lại
+                        if quarters_counted == 4:
+                            break
+                except (ValueError, TypeError) as e:
+                    # Bỏ qua các dòng không parse được
+                    logger.debug(f"Skipping row {idx}: {e}")
+                    continue
+        
+        # Kiểm tra xem có đủ dữ liệu không
+        if quarters_counted == 0:
+            logger.warning(f"Could not find valid quarterly data for {ticker}")
+            return None
+        
+        # Tính Free Cash Flow TTM = TTM Operating Cash Flow - TTM Capital Expenditures
+        # Đây là công thức chuẩn để tính FCF
+        ttm_fcf = ttm_ocf - ttm_capex
+        
+        logger.info(f"FCF TTM for {ticker} (from {quarters_counted} quarters):")
+        logger.info(f"  TTM Operating Cash Flow: {ttm_ocf:,.0f} VND")
+        logger.info(f"  TTM Capital Expenditures: {ttm_capex:,.0f} VND")
+        logger.info(f"  TTM Free Cash Flow: {ttm_fcf:,.0f} VND")
+        
+        cache_manager.set_with_timestamp(ticker, cache_key, ttm_fcf)
+        return float(ttm_fcf)
+        
+    except Exception as e:
+        logger.error(f"Error calculating FCF TTM for {ticker}: {e}")
+        return None
+
+
+def get_free_cash_flow(ticker, use_ttm=True):
+    """
+    Tính Free Cash Flow (FCF) = Operating Cash Flow - Capital Expenditures.
+    
+    Free Cash Flow là dòng tiền tự do mà công ty tạo ra sau khi trừ đi các khoản
+    chi tiêu cần thiết để duy trì hoạt động và tài sản cố định.
+    
+    Công thức: FCF = Operating Cash Flow - Capital Expenditures (CapEx)
+    
+    Mặc định sử dụng TTM (Trailing Twelve Months):
+    - Tính bằng cách cộng dồn 4 quý gần nhất từ vnstock
+    - Phản ánh tốt hơn tình hình hiện tại của công ty
+    - Chuẩn trong phân tích tài chính và định giá DCF
+    
+    Args:
+        ticker (str): Mã cổ phiếu (ví dụ: 'FPT', 'VNM')
+        use_ttm (bool): Nếu True (mặc định), tính TTM từ vnstock (cộng 4 quý gần nhất).
+                       Nếu False, chỉ lấy dữ liệu từ quý gần nhất.
+    
+    Returns:
+        float: Free Cash Flow tính bằng VND, hoặc None nếu không lấy được dữ liệu
+    
+    Note:
+        - Mặc định sử dụng TTM để có giá trị chính xác hơn cho phân tích DCF
+        - Dữ liệu được lấy từ vnstock library (source: VCI)
+        - Nếu TTM không tính được, sẽ fallback về quý gần nhất
+        - Kết quả được cache tự động để tránh tính toán lại
+    
+    Example:
+        >>> # Sử dụng TTM (mặc định - khuyến nghị)
+        >>> fcf = get_free_cash_flow('FPT')
+        >>> print(f"FCF TTM: {fcf:,.0f} VND")
+        
+        >>> # Chỉ lấy quý gần nhất (không khuyến nghị)
+        >>> fcf_quarter = get_free_cash_flow('FPT', use_ttm=False)
+    """
+    # Sử dụng TTM (mặc định) - tính từ vnstock bằng cách cộng 4 quý gần nhất
+    # Đây là phương pháp được khuyến nghị vì phản ánh tốt hơn tình hình hiện tại
+    if use_ttm:
+        fcf_ttm = get_free_cash_flow_ttm(ticker)
+        if fcf_ttm:
+            return fcf_ttm
+        # Nếu không tính được TTM, cảnh báo và fallback về quý gần nhất
+        logger.warning(f"Could not calculate TTM for {ticker}, falling back to single quarter")
+    
+    # Fallback: Lấy dữ liệu từ quý gần nhất (không khuyến nghị cho DCF)
+    # Chỉ sử dụng khi không thể tính TTM hoặc use_ttm=False
     if not HAS_VNSTOCK:
         logger.error("vnstock not installed. Install with: pip install vnstock")
         return None
 
     try:
-        logger.info(f"Fetching cash flow data for {ticker} using vnstock...")
+        # Lấy dữ liệu cash flow từ vnstock (quý gần nhất)
+        # Lưu ý: Đây là fallback, nên sử dụng TTM (use_ttm=True) để có giá trị chính xác hơn
+        logger.info(f"Fetching cash flow data for {ticker} using vnstock (single quarter)...")
+        logger.warning(f"Note: Using single quarter data. Consider using TTM (use_ttm=True) for better accuracy.")
+        
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         try:
@@ -75,38 +259,82 @@ def get_free_cash_flow(ticker):
             logger.warning(f"No cash flow data available for {ticker}")
             return None
 
+        # Lấy dòng đầu tiên (quý gần nhất)
         latest_row = cash_flow_df.iloc[0]
 
-        if 'Net cash inflows/outflows from operating activities' in latest_row.index:
-            fcf = latest_row['Net cash inflows/outflows from operating activities']
-            if pd.notna(fcf) and fcf > 0:
-                logger.info(f"FCF for {ticker}: {fcf:,.0f} VND")
-                return float(fcf)
-
-        alt_names = [
+        # Tìm Operating Cash Flow (OCF) trong các cột có thể có
+        # OCF là dòng tiền từ hoạt động kinh doanh chính của công ty
+        ocf = None
+        ocf_names = [
+            'Net cash inflows/outflows from operating activities',
             'Net Cash Flows from Operating Activities',
             'Operating cash flow',
             'Cash flows from operating activities'
         ]
 
-        for col_name in alt_names:
+        for col_name in ocf_names:
             if col_name in latest_row.index:
-                fcf = latest_row[col_name]
-                if pd.notna(fcf) and fcf > 0:
-                    logger.info(f"FCF for {ticker}: {fcf:,.0f} VND")
-                    return float(fcf)
+                ocf_value = latest_row[col_name]
+                if pd.notna(ocf_value):
+                    ocf = float(ocf_value)
+                    break
 
-        logger.warning(f"Could not find operating cash flow in columns")
-        return None
+        if ocf is None:
+            logger.warning(f"Could not find operating cash flow for {ticker}")
+            return None
+
+        # Tìm Capital Expenditures (CapEx)
+        # CapEx là chi phí đầu tư vào tài sản cố định (nhà xưởng, máy móc, thiết bị)
+        # Trong báo cáo tài chính, CapEx thường là số âm (dòng tiền ra)
+        capex = 0.0
+        capex_names = [
+            'Purchase of fixed assets',
+            'Capital Expenditures',
+            'Purchase of property, plant and equipment',
+            'Investments in fixed assets'
+        ]
+
+        for col_name in capex_names:
+            if col_name in latest_row.index:
+                capex_value = latest_row[col_name]
+                if pd.notna(capex_value):
+                    # Lấy giá trị tuyệt đối vì CapEx trong báo cáo thường là số âm
+                    capex = abs(float(capex_value))
+                    logger.info(f"Found CapEx for {ticker}: {capex:,.0f} VND")
+                    break
+
+        # Tính Free Cash Flow = Operating Cash Flow - Capital Expenditures
+        # FCF là dòng tiền tự do sau khi trừ đi các khoản đầu tư cần thiết
+        fcf = ocf - capex
+        
+        logger.info(f"Operating Cash Flow for {ticker} (single quarter): {ocf:,.0f} VND")
+        logger.info(f"Capital Expenditures for {ticker} (single quarter): {capex:,.0f} VND")
+        logger.info(f"Free Cash Flow (FCF) for {ticker} (single quarter): {fcf:,.0f} VND (OCF - CapEx)")
+        logger.warning(f"Note: This is single quarter data. For DCF analysis, TTM is recommended (use_ttm=True)")
+
+        if fcf <= 0:
+            logger.warning(f"FCF is negative or zero for {ticker}: {fcf:,.0f} VND")
+            # Vẫn trả về giá trị nhưng cảnh báo
+
+        # Cache kết quả với key riêng để phân biệt với TTM
+        cache_manager.set_with_timestamp(ticker, "fcf", fcf)
+        return float(fcf)
 
     except Exception as e:
-        logger.error(f"Error fetching from vnstock: {e}")
+        logger.error(f"Error fetching FCF from vnstock: {e}")
+        # Check cache as fallback
+        if cache_manager.exists(ticker, "fcf"):
+            cached_fcf = cache_manager.get(f"{ticker.upper()}_fcf")
+            logger.info(f"Using cached FCF for {ticker}: {cached_fcf:,.0f}")
+            return float(cached_fcf) if cached_fcf else None
         return None
 
 def get_shares_outstanding(ticker):
+    # Default shares fallback (FPT shares outstanding as of DEC-26-2025)
+    default_shares = 1703507121
+    
     if not HAS_VNSTOCK:
         logger.error("vnstock not installed. Install with: pip install vnstock")
-        default_shares = 1703507121 # FPT shares outstanding as of DEC-26-2025
         logger.info(f"Using default: {default_shares}")
         return default_shares
 

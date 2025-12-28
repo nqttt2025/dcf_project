@@ -125,6 +125,10 @@ dcf-all:
 	@echo "Running DCF analysis for all VN30 stocks..."
 	@$(PYTHON) run_all_dcf_main.py
 
+dcf-all-retry:
+	@echo "Running DCF analysis for all VN30 stocks (with retry & delay)..."
+	@$(PYTHON) scripts/run_all_dcf_with_retry.py
+
 # Show DCF analysis help
 dcf-help:
 	@echo "DCF Analysis Commands:"

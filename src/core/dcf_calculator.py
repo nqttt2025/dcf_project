@@ -115,8 +115,11 @@ class DCFCalculator:
         """
         self.logger.info(f"Starting async data fetch for {self.ticker}...")
 
+        # Tạo các task để fetch dữ liệu song song (parallel execution)
+        # Lưu ý: get_free_cash_flow() mặc định sử dụng TTM (use_ttm=True)
+        # TTM phản ánh tốt hơn tình hình hiện tại và chuẩn trong phân tích DCF
         tasks = [
-            asyncio.to_thread(get_free_cash_flow, self.ticker),
+            asyncio.to_thread(get_free_cash_flow, self.ticker),  # Mặc định use_ttm=True
             asyncio.to_thread(get_growth_estimate, self.ticker),
             asyncio.to_thread(get_shares_outstanding, self.ticker),
             asyncio.to_thread(get_earnings_per_share_Diluted, self.ticker),
@@ -124,7 +127,7 @@ class DCFCalculator:
             asyncio.to_thread(lambda: get_market_cap(self.ticker)[0]),
         ]
 
-        self.logger.info("Fetching: FCF, Growth, Shares, EPS, Price, Market Cap (in parallel)...")
+        self.logger.info("Fetching: FCF (TTM), Growth, Shares, EPS, Price, Market Cap (in parallel)...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Check for errors
