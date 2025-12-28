@@ -6,5 +6,4 @@ venv/
 .vscode
 **/*tmp
 .vscode/launch.json
-results/*
-results/*.json
+results/

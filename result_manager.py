@@ -61,31 +61,35 @@ class ResultManager:
             data: Dictionary chứa kết quả
         """
         with open(log_file, 'w', encoding='utf-8') as f:
+            # Header
             f.write("=" * 80 + "\n")
-            f.write(f"DCF VALUATION RESULT - {data.get('stock_name', 'Unknown')}\n")
+            f.write(f"DCF model (basic)\n")
             f.write("=" * 80 + "\n")
-            f.write(f"Saved at: {data.get('saved_at', 'N/A')}\n")
-            f.write("-" * 80 + "\n\n")
-
-            # Format kết quả một cách dễ đọc
-            for key, value in data.items():
-                if key not in ['stock_name', 'saved_at']:
-                    # Định dạng key thành readable format
-                    formatted_key = self._format_key(key)
-
-                    if isinstance(value, dict):
-                        f.write(f"\n{formatted_key}:\n")
-                        for sub_key, sub_value in value.items():
-                            formatted_sub_key = self._format_key(sub_key)
-                            f.write(f"  {formatted_sub_key}: {sub_value}\n")
-                    elif isinstance(value, (list, tuple)):
-                        f.write(f"\n{formatted_key}:\n")
-                        for i, item in enumerate(value):
-                            f.write(f"  [{i}]: {item}\n")
-                    else:
-                        f.write(f"{formatted_key}: {value}\n")
-
-            f.write("\n" + "=" * 80 + "\n")
+            
+            # Main valuation parameters
+            if 'price' in data:
+                f.write(f"Market price: {data['price']}\n")
+            if 'eps' in data:
+                f.write(f"EPS: {data['eps']}\n")
+            if 'growth_estimate' in data:
+                f.write(f"Growth estimate: {data['growth_estimate']}\n")
+            if 'dcf_params' in data and isinstance(data['dcf_params'], dict):
+                f.write(f"Term: {data['dcf_params'].get('yr', 5)} years\n")
+                f.write(f"Discount Rate: {data['dcf_params'].get('dr', 10)}%\n")
+                f.write(f"Perpetual Rate: {data['dcf_params'].get('pr', 2.5)}%\n")
+            
+            # DCF Results
+            f.write("=" * 80 + "\n")
+            f.write(f"DCF Fair Value: {data.get('dcf_fair_value', 'N/A')}\n")
+            
+            # Graham Results
+            if data.get('graham_fair_value'):
+                f.write("=" * 80 + "\n")
+                f.write("Graham style valuation basic (Page 295, The Intelligent Investor)\n")
+                f.write("=" * 80 + "\n")
+                f.write(f"Expected value based on growth rate: {data['graham_fair_value']}\n")
+            
+            f.write("=" * 80 + "\n")
 
     def _format_key(self, key):
         """

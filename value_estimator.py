@@ -125,7 +125,7 @@ if __name__ == "__main__":
     logger.info("=" * 80)
 
     graham(data)
-    
+
     # Save cache to file at the end
     cache_manager = get_cache_manager()
     cache_manager.save_to_file()
