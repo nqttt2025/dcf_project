@@ -139,6 +139,15 @@ web-install:
 docker-build:
 	@./scripts/docker.sh build
 
+docker-build-fast:
+	@PARALLEL=true ./scripts/docker.sh build
+
+docker-versions:
+	@./scripts/docker_version.sh get
+
+docker-version-check-base:
+	@./scripts/docker_version.sh check-base
+
 docker-build-auto:
 	@echo "Building with auto-tagging..."
 	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \

@@ -3,8 +3,25 @@ version: '3.8'
 # Docker Compose file with versioning support
 # Version is set via VERSION environment variable or defaults to 'latest'
 # Usage: VERSION=v1.0.0 docker-compose build
+# 
+# Build optimizations:
+# - BuildKit enabled for faster builds
+# - Base image caching for common dependencies
+# - Parallel builds for multiple services
 
 services:
+  # Base image with common dependencies (built first, cached for other services)
+  base:
+    build:
+      context: .
+      dockerfile: services/common/Dockerfile.base
+      args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
+    image: dcf-project-base:${BASE_VERSION:-latest}
+    # Don't start this service, it's just a base image
+    profiles:
+      - build-only
+
   # API Gateway - Routes requests to microservices
   gateway:
     build:

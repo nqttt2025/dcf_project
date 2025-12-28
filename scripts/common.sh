@@ -72,9 +72,15 @@ log_success() {
 # Version Management
 # ============================================================================
 
-# Get current version from git tag or generate one
-get_version() {
+# Get current project version from git tag (single source of truth)
+# This is the main version used for Docker service images
+get_project_version() {
     "$PROJECT_ROOT/scripts/get_version.sh"
+}
+
+# Alias for backward compatibility
+get_version() {
+    get_project_version
 }
 
 # ============================================================================

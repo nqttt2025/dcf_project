@@ -1,0 +1,30 @@
+{
+  "base": {
+    "current": "v1.0.0",
+    "last_requirements_hash": "4aa4dbb54b0ccd58739608f55095790ee648e37cd5c1a0194ed2f16afadb7e7e",
+    "last_updated": ""
+  },
+  "services": {
+    "gateway": {
+      "current": "v1.0.0",
+      "depends_on_base": true
+    },
+    "dcf": {
+      "current": "v1.0.0",
+      "depends_on_base": true
+    },
+    "stock": {
+      "current": "v1.0.0",
+      "depends_on_base": true
+    },
+    "frontend": {
+      "current": "v1.0.0",
+      "depends_on_base": false
+    }
+  },
+  "metadata": {
+    "version_file": "docker-versions.json",
+    "created_at": "2025-12-29",
+    "description": "Docker image version management - tracks versions and dependencies"
+  }
+}

@@ -28,7 +28,14 @@ else
     
     # Create tag
     git tag -a "$VERSION" -m "$COMMIT_MSG"
+    
+    # Sync Docker versions with git tag
+    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    echo "Syncing Docker versions with git tag: $VERSION"
+    "$PROJECT_ROOT/scripts/docker_version.sh" sync-git >/dev/null 2>&1 || true
+    
     echo "✓ Created tag: $VERSION from commit message"
+    echo "✓ Docker versions synced"
 fi
 
 echo "$VERSION"

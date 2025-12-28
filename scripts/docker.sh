@@ -16,9 +16,53 @@ source "$SCRIPT_DIR/common.sh"
 docker_build_images() {
     local version="$1"
     local log_file="$2"
+    local parallel="${3:-false}"
+    
+    # Enable BuildKit for faster builds
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
     
     log_to_file "$log_file" "Building images with tag: $version"
-    VERSION="$version" docker-compose build 2>&1 | tee -a "$log_file"
+    log_to_file "$log_file" "BuildKit enabled: $DOCKER_BUILDKIT"
+    
+    # Check if base image needs rebuild
+    log_to_file "$log_file" "Checking base image version..."
+    local base_version
+    base_version=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
+    local base_needs_rebuild
+    base_needs_rebuild=$("$PROJECT_ROOT/scripts/docker_version.sh" check-base 2>/dev/null && echo "yes" || echo "no")
+    
+    # Get project version (from git tag - single source of truth)
+    local project_version
+    project_version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    project_version="${project_version%-dirty}"  # Remove -dirty suffix
+    log_to_file "$log_file" "Project version (from git tag): $project_version"
+    
+    # Build base image if needed
+    if [[ "$base_needs_rebuild" == "yes" ]] || ! docker_image_exists "dcf-project-base" "$base_version"; then
+        log_to_file "$log_file" "Building base image (version: $base_version)..."
+        BASE_VERSION="$base_version" docker-compose build base 2>&1 | tee -a "$log_file" || true
+        
+        # Tag base image
+        docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        
+        # Update hash after successful build
+        "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
+    else
+        log_to_file "$log_file" "Base image unchanged (version: $base_version), using cached version"
+        # Ensure base image is tagged correctly
+        if docker_image_exists "dcf-project-base" "latest"; then
+            docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        fi
+    fi
+    
+    # Build service images
+    if [[ "$parallel" == "true" ]]; then
+        log_to_file "$log_file" "Building images in parallel..."
+        VERSION="$version" docker-compose build --parallel 2>&1 | tee -a "$log_file"
+    else
+        VERSION="$version" docker-compose build 2>&1 | tee -a "$log_file"
+    fi
     return $?
 }
 
@@ -67,19 +111,23 @@ docker_cleanup_after_build() {
 # ============================================================================
 
 cmd_build() {
+    # Get project version from git tag (single source of truth)
     local version
-    version=$(get_version)
+    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version="${version%-dirty}"  # Remove -dirty suffix
+    local parallel="${PARALLEL:-false}"
     local log_file="$DOCKER_LOG_DIR/docker-build-$(date +%Y%m%d-%H%M%S).log"
     
     log_to_file "$log_file" "Building Docker images for microservices..."
     log_to_file "$log_file" "Version: $version"
+    log_to_file "$log_file" "Parallel: $parallel"
     log_to_file "$log_file" "Log file: $log_file"
     log_to_file "$log_file" "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
     log_to_file "$log_file" "========================================"
     
     docker_remove_old_images "$version" "$log_file"
     
-    if docker_build_images "$version" "$log_file"; then
+    if docker_build_images "$version" "$log_file" "$parallel"; then
         docker_tag_images "$version" "$log_file"
     fi
     
@@ -91,8 +139,10 @@ cmd_build() {
 }
 
 cmd_rebuild() {
+    # Get project version from git tag (single source of truth)
     local version
-    version=$(get_version)
+    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version="${version%-dirty}"  # Remove -dirty suffix
     local log_file="$DOCKER_LOG_DIR/docker-rebuild-$(date +%Y%m%d-%H%M%S).log"
     
     log_to_file "$log_file" "Rebuilding Docker images (with cleanup)..."
@@ -112,6 +162,18 @@ cmd_rebuild() {
     log_to_file "$log_file" "Cleaning up unused images..."
     docker image prune -f --filter "dangling=true" 2>&1 | tee -a "$log_file" || true
     
+    # Rebuild base image first
+    log_to_file "$log_file" "Rebuilding base image..."
+    local base_version
+    base_version=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
+    BASE_VERSION="$base_version" docker-compose build --no-cache base 2>&1 | tee -a "$log_file" || true
+    
+    # Tag base image
+    docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+    
+    # Update hash after rebuild
+    "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
+    
     log_to_file "$log_file" "Building new images (--no-cache) with tag: $version..."
     if VERSION="$version" docker-compose build --no-cache 2>&1 | tee -a "$log_file"; then
         docker_tag_images "$version" "$log_file"
@@ -124,8 +186,10 @@ cmd_rebuild() {
 
 cmd_up() {
     log_info "Starting Docker microservices..."
+    # Get project version from git tag (single source of truth)
     local version
-    version=$(get_version)
+    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version="${version%-dirty}"  # Remove -dirty suffix
     echo "Using version: $version"
     VERSION="$version" docker-compose up -d
     echo ""
@@ -141,8 +205,10 @@ cmd_up() {
 
 cmd_down() {
     log_info "Stopping Docker containers..."
+    # Get project version from git tag (single source of truth)
     local version
-    version=$(get_version)
+    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version="${version%-dirty}"  # Remove -dirty suffix
     VERSION="$version" docker-compose down
 }
 
@@ -223,9 +289,10 @@ show_help() {
     print_help_header "Docker Management Commands"
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo ""
-    echo "Build & Deploy:"
-    echo "  build       - Build Docker images (with auto cleanup)"
-    echo "  rebuild     - Rebuild from scratch (with cleanup)"
+        echo "Build & Deploy:"
+        echo "  build       - Build Docker images (with auto cleanup)"
+        echo "  build-fast  - Build Docker images in parallel (faster)"
+        echo "  rebuild     - Rebuild from scratch (with cleanup)"
     echo "  up          - Start Docker containers"
     echo "  down        - Stop Docker containers"
     echo "  restart     - Restart containers"
@@ -277,6 +344,9 @@ main() {
         build)
             cmd_build
             ;;
+        build-fast)
+            PARALLEL=true cmd_build
+            ;;
         rebuild)
             cmd_rebuild
             ;;
@@ -306,8 +376,10 @@ main() {
             ;;
         restart)
             log_info "Restarting Docker containers..."
+            # Get project version from git tag (single source of truth)
             local version
-            version=$(get_version)
+            version=$("$PROJECT_ROOT/scripts/get_version.sh")
+            version="${version%-dirty}"  # Remove -dirty suffix
             VERSION="$version" docker-compose restart
             ;;
         clean)

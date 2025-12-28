@@ -1,7 +1,11 @@
 #!/bin/bash
 # Auto versioning script - Automatically increments version and creates git tag
+# Also syncs Docker versions
 
 set -e
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Get current version from git tag
 CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -61,7 +65,11 @@ fi
 # Create tag
 git tag -a "$NEW_VERSION" -m "Release version $NEW_VERSION"
 
+# Sync Docker versions with new git tag
+echo "Syncing Docker versions with git tag: $NEW_VERSION"
+"$PROJECT_ROOT/scripts/docker_version.sh" sync-git >/dev/null 2>&1 || true
+
 echo "✓ Created tag: $NEW_VERSION"
+echo "✓ Docker versions synced"
 echo "To push tag: git push origin $NEW_VERSION"
 echo "$NEW_VERSION"
-

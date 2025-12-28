@@ -2,9 +2,10 @@
 .git
 .gitignore
 .gitattributes
+.git/
 
 # Python
-__pycache__
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -12,10 +13,13 @@ __pycache__
 env/
 venv/
 ENV/
-.venv
+.venv/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # IDE
 .vscode/
@@ -28,6 +32,7 @@ build/
 *.log
 log/
 logs/
+*.log.*
 
 # Data (will be mounted as volume)
 data/cache/*
@@ -36,9 +41,8 @@ data/results/*
 
 # Tests
 tests/
-.pytest_cache/
-.coverage
-htmlcov/
+test_*.py
+*_test.py
 
 # Documentation
 docs/
@@ -46,12 +50,26 @@ docs/
 !README.md
 
 # Docker
-docker-compose.yml
+docker-compose*.yml
 Dockerfile*
 .dockerignore
+.docker/
+
+# Scripts (not needed in containers)
+scripts/
+Makefile
+*.sh
 
 # Other
 .DS_Store
 *.bak
 *.tmp
+*.tar
+*.gz
+*.zip
+
+# Build artifacts
+reports/
+*.html
+*.xml
 

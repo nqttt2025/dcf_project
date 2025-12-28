@@ -1,0 +1,28 @@
+# Base image with common dependencies
+# This image is cached and reused by all services
+# Version is managed via docker-versions.json
+ARG BASE_VERSION=latest
+FROM python:3.11-slim
+
+ARG BASE_VERSION
+LABEL base_version="${BASE_VERSION}"
+LABEL maintainer="DCF Project"
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first (for better caching)
+COPY services/common/requirements.txt /app/common_requirements.txt
+
+# Install Python dependencies with cache mount
+# Cache mount persists pip cache between builds
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r /app/common_requirements.txt
+
+# Set PYTHONPATH
+ENV PYTHONPATH=/app
+
