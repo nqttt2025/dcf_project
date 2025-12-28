@@ -8,13 +8,23 @@ ut:
 	@echo "Running unit tests for DCF Project"
 	@python3 ut/run_ut
 
+# Run function tests
+ft:
+	@echo "Running function tests for DCF Project"
+	@cd .. && PYTHONPATH=src:$$PYTHONPATH python3 -m unittest discover -s tests/ft -p "test_*.py" -v
+
+# Run system tests
+st:
+	@echo "Running system tests for DCF Project"
+	@cd .. && PYTHONPATH=src:$$PYTHONPATH python3 -m unittest discover -s tests/st -p "test_*.py" -v
+
 # Run integration/complete test
 complete:
 	@echo "Running complete DCF functionality test"
 	@cd .. && PYTHONPATH=src:$$PYTHONPATH python3 tests/test_dcf_complete.py || echo "Complete test failed (may require external API access)"
 
-# Run all tests (unit + complete)
-all: ut complete
+# Run all tests (unit + function + system + complete)
+all: ut ft st complete
 
 # Run a specific unit test file
 test-config:
@@ -45,5 +55,5 @@ pylint:
 		$(PYTHON) -m pylint -v -j 0 $(PYLINT_LEVEL) $$(find . -type f -name "*.py") \
 		|& tee -a test-pylint.log
 
-.PHONY: ut complete all test test-config test-cache test-result test-dcf pylint
+.PHONY: ut ft st complete all test test-config test-cache test-result test-dcf pylint
 

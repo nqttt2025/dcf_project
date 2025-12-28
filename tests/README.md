@@ -1,6 +1,6 @@
-# Unit Tests
+# Test Suite
 
-This directory contains unit tests for the DCF project, following the test structure pattern from the reference project.
+This directory contains comprehensive tests for the DCF project, following the test structure pattern from the reference project (`/home/eenitug/aat_ims_load`).
 
 ## Directory Structure
 
@@ -9,14 +9,25 @@ tests/
 ├── lib/                    # Test utilities (logger, decorators)
 │   ├── __init__.py
 │   └── test_logger.py      # Border decorator and logger for tests
-├── ut/                     # Unit tests
+├── ut/                     # Unit Tests
 │   ├── __init__.py
 │   ├── run_ut              # Test runner script
 │   ├── test_config_manager.py
 │   ├── test_cache_manager.py
 │   ├── test_result_manager.py
 │   └── test_dcf_calculator.py
-└── test_dcf_complete.py    # Integration test (existing)
+├── ft/                     # Function Tests
+│   ├── __init__.py
+│   ├── test_dcf_calculation.py
+│   ├── test_graham_calculation.py
+│   └── test_config_parsing.py
+├── st/                     # System Tests
+│   ├── __init__.py
+│   ├── test_dcf_pipeline.py
+│   ├── test_multi_stock_analysis.py
+│   ├── test_cache_system.py
+│   └── test_web_service.py
+└── test_dcf_complete.py    # Integration Test
 ```
 
 ## Running Tests
@@ -25,11 +36,13 @@ tests/
 
 ```bash
 # From project root
-make              # Run all tests (default)
-make test         # Run all tests
+make              # Run unit tests (default)
+make test         # Run unit tests
 make ut           # Run unit tests only
+make ft           # Run function tests only
+make st           # Run system tests only
 make complete     # Run complete functionality test
-make all          # Run all tests (unit + complete)
+make all          # Run all tests (ut + ft + st + complete)
 
 # Run specific test modules
 make test-config  # Run ConfigManager tests
@@ -40,7 +53,10 @@ make test-dcf     # Run DCFCalculator tests
 # From tests directory
 cd tests
 make ut           # Run unit tests
+make ft           # Run function tests
+make st           # Run system tests
 make complete     # Run complete test
+make all          # Run all tests
 ```
 
 ### Using Python directly
@@ -70,33 +86,83 @@ python3 -m unittest tests.ut.test_config_manager.TestConfigManager.test_singleto
 
 ## Test Coverage
 
-### test_config_manager.py
+### Unit Tests (ut/)
+
+#### test_config_manager.py
 - Singleton pattern verification
 - DCF parameters retrieval
 - Graham parameters retrieval
 - Ticker and data source retrieval
 - Factory function testing
 
-### test_cache_manager.py
+#### test_cache_manager.py
 - Singleton pattern verification
 - Cache set/get operations
 - Timestamp handling
 - File persistence
 - Cache clearing
 
-### test_result_manager.py
+#### test_result_manager.py
 - Result saving (JSON and text formats)
 - Result loading
 - Result listing
 - Result deletion
 - Result serialization
 
-### test_dcf_calculator.py
+#### test_dcf_calculator.py
 - DCFCalculator initialization
 - DCF calculation logic
 - Graham valuation calculation
 - Async data fetching (mocked)
 - Full calculation flow (mocked)
+
+### Function Tests (ft/)
+
+#### test_dcf_calculation.py
+- Basic DCF calculation
+- Zero growth rate handling
+- Negative growth rate handling
+- Missing growth rate error handling
+- Different projection years
+
+#### test_graham_calculation.py
+- Basic Graham valuation
+- Zero growth calculation
+- High growth calculation
+- Different base PE values
+
+#### test_config_parsing.py
+- Complete config file parsing
+- Minimal config with defaults
+- Ticker extraction from filename
+- Custom parameters parsing
+- Missing file error handling
+
+### System Tests (st/)
+
+#### test_dcf_pipeline.py
+- Complete DCF pipeline from config to result
+- Cache file creation
+- Result files (JSON and text) creation
+- Error handling
+
+#### test_multi_stock_analysis.py
+- Sequential multi-stock analysis
+- Parallel multi-stock analysis
+- Result consistency across runs
+
+#### test_cache_system.py
+- Cache creation after calculation
+- Cache timestamp verification
+- Cache reuse on subsequent calculations
+- Cache data integrity
+
+#### test_web_service.py
+- Gateway health endpoint
+- DCF service health endpoint
+- Stock service health endpoint
+- Gateway stocks endpoint
+- Frontend availability
 
 ## Test Utilities
 

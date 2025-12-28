@@ -1,8 +1,4 @@
 import requests
-import cloudscraper
-from lxml import html
-from pandas import json_normalize
-import pandas as pd
 import urllib3
 import time
 import json
@@ -12,6 +8,26 @@ from io import StringIO
 from datetime import datetime
 from ..utils.logger import get_logger
 from ..utils.cache_manager import get_cache_manager
+
+# Optional imports - only import if available
+try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+except ImportError:
+    HAS_CLOUDSCRAPER = False
+
+try:
+    from lxml import html
+    HAS_LXML = True
+except ImportError:
+    HAS_LXML = False
+
+try:
+    from pandas import json_normalize
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
 
 try:
     old_stdout = sys.stdout
@@ -94,6 +110,10 @@ def get_free_cash_flow_ttm(ticker):
         logger.error("vnstock not installed. Install with: pip install vnstock")
         return None
     
+    if not HAS_PANDAS:
+        logger.error("pandas not installed. Install with: pip install pandas")
+        return None
+    
     # Check cache first
     cache_key = "fcf_ttm"
     if cache_manager.exists(ticker, cache_key):
@@ -139,12 +159,21 @@ def get_free_cash_flow_ttm(ticker):
             
             # Kiểm tra tính hợp lệ của dữ liệu
             # Bỏ qua các dòng không có dữ liệu hoặc là header row
-            if pd.notna(ocf_val) and ocf_val != 0 and ocf_val != ticker.upper():
+            if HAS_PANDAS:
+                is_valid = pd.notna(ocf_val) and ocf_val != 0 and ocf_val != ticker.upper()
+            else:
+                is_valid = ocf_val is not None and ocf_val != 0 and ocf_val != ticker.upper()
+            
+            if is_valid:
                 try:
                     # Chuyển đổi sang float
                     ocf_float = float(ocf_val)
                     # CapEx trong báo cáo thường là số âm (dòng tiền ra), lấy giá trị tuyệt đối
-                    capex_float = abs(float(capex_val)) if capex_val != 0 and pd.notna(capex_val) else 0
+                    if HAS_PANDAS:
+                        capex_valid = capex_val != 0 and pd.notna(capex_val)
+                    else:
+                        capex_valid = capex_val != 0 and capex_val is not None
+                    capex_float = abs(float(capex_val)) if capex_valid else 0
                     
                     # Chỉ tính các quý có OCF > 0 và chưa đủ 4 quý
                     if ocf_float > 0 and quarters_counted < 4:
@@ -275,7 +304,8 @@ def get_free_cash_flow(ticker, use_ttm=True):
         for col_name in ocf_names:
             if col_name in latest_row.index:
                 ocf_value = latest_row[col_name]
-                if pd.notna(ocf_value):
+                ocf_valid = (HAS_PANDAS and pd.notna(ocf_value)) or (not HAS_PANDAS and ocf_value is not None)
+                if ocf_valid:
                     ocf = float(ocf_value)
                     break
 
@@ -297,7 +327,8 @@ def get_free_cash_flow(ticker, use_ttm=True):
         for col_name in capex_names:
             if col_name in latest_row.index:
                 capex_value = latest_row[col_name]
-                if pd.notna(capex_value):
+                capex_valid = (HAS_PANDAS and pd.notna(capex_value)) or (not HAS_PANDAS and capex_value is not None)
+                if capex_valid:
                     # Lấy giá trị tuyệt đối vì CapEx trong báo cáo thường là số âm
                     capex = abs(float(capex_value))
                     logger.info(f"Found CapEx for {ticker}: {capex:,.0f} VND")
@@ -360,7 +391,8 @@ def get_shares_outstanding(ticker):
         # Try to find shares outstanding or common shares in the data
         if 'Common shares (Bn. VND)' in latest_row.index:
             shares_capital = latest_row['Common shares (Bn. VND)']
-            if pd.notna(shares_capital) and shares_capital > 0:
+            shares_capital_valid = (HAS_PANDAS and pd.notna(shares_capital)) or (not HAS_PANDAS and shares_capital is not None)
+            if shares_capital_valid and shares_capital > 0:
                 # Convert from charter capital (VND) to number of shares
                 # Par value (mệnh giá) of FPT shares is 10,000 VND per share
                 par_value = 10000
@@ -379,7 +411,8 @@ def get_shares_outstanding(ticker):
         for col_name in alt_names:
             if col_name in latest_row.index:
                 shares = latest_row[col_name]
-                if pd.notna(shares) and shares > 0:
+                shares_valid = (HAS_PANDAS and pd.notna(shares)) or (not HAS_PANDAS and shares is not None)
+                if shares_valid and shares > 0:
                     logger.info(f"Fetched shares outstanding for {ticker}: {shares:,.0f}")
                     shares_value = float(shares)
                     cache_manager.set_with_timestamp(ticker, "shares", shares_value)
@@ -432,7 +465,12 @@ def get_earnings_per_share_Diluted(ticker):
         elif 'Net Profit For the Year' in latest_row.index:
             net_profit = latest_row['Net Profit For the Year']
 
-        if net_profit is None or pd.isna(net_profit) or net_profit <= 0:
+        if HAS_PANDAS:
+            is_invalid = net_profit is None or pd.isna(net_profit) or net_profit <= 0
+        else:
+            is_invalid = net_profit is None or net_profit <= 0
+        
+        if is_invalid:
             logger.warning(f"Could not find net profit in income statement for {ticker}")
             raise Exception("Net profit not found in data")
 
@@ -591,6 +629,9 @@ def get_equity(ticker):
         raise Exception(f"An unexpected error occurred: {e}")
 
 def get_staticvalue(ticker):
+    if not HAS_CLOUDSCRAPER or not HAS_LXML:
+        logger.warning("cloudscraper or lxml not available, get_staticvalue not supported")
+        raise Exception("cloudscraper or lxml module not available")
     try:
         url = "https://stockanalysis.com/quote/hose/{}/statistics/".format(ticker)
         scraper = cloudscraper.create_scraper()

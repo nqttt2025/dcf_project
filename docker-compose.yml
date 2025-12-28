@@ -1,0 +1,120 @@
+version: '3.8'
+
+# Docker Compose file with versioning support
+# Version is set via VERSION environment variable or defaults to 'latest'
+# Usage: VERSION=v1.0.0 docker-compose build
+
+services:
+  # API Gateway - Routes requests to microservices
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+      args:
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-gateway:${VERSION:-latest}
+    container_name: dcf-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DCF_SERVICE_URL=http://dcf:8001
+      - STOCK_SERVICE_URL=http://stock:8002
+      - APP_VERSION=${VERSION:-latest}
+    depends_on:
+      - dcf
+      - stock
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # DCF Service - Handles DCF analysis
+  dcf:
+    build:
+      context: .
+      dockerfile: services/dcf/Dockerfile
+      args:
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-dcf:${VERSION:-latest}
+    container_name: dcf-service
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_VERSION=${VERSION:-latest}
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./log:/app/log
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Stock Service - Manages stock data
+  stock:
+    build:
+      context: .
+      dockerfile: services/stock/Dockerfile
+      args:
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-stock:${VERSION:-latest}
+    container_name: dcf-stock
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_VERSION=${VERSION:-latest}
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./log:/app/log
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend Service - Nginx serving static files
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+      args:
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-frontend:${VERSION:-latest}
+    container_name: dcf-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - gateway
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  dcf-network:
+    driver: bridge
+
+volumes:
+  dcf-data:
+    driver: local

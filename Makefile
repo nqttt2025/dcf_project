@@ -17,7 +17,7 @@ REPORT_DIR = reports
 # Run all tests (unit tests only - complete test may require external APIs)
 test: ut
 	@echo "Unit tests completed"
-	@echo "Note: Run 'make complete' separately for integration tests (requires external API access)"
+	@echo "Note: Run 'make ft' for function tests, 'make st' for system tests, 'make complete' for integration tests"
 
 # Run unit tests
 ut:
@@ -29,8 +29,18 @@ complete:
 	@echo "Running complete functionality test..."
 	@$(MAKE) complete -C $(TEST_DIR)
 
-# Run all tests (unit + complete)
-all: ut complete
+# Run function tests
+ft:
+	@echo "Running function tests..."
+	@$(MAKE) ft -C $(TEST_DIR)
+
+# Run system tests
+st:
+	@echo "Running system tests..."
+	@$(MAKE) st -C $(TEST_DIR)
+
+# Run all tests (unit + function + system + complete)
+all: ut ft st complete
 
 # Run specific unit test
 test-config:
@@ -227,7 +237,246 @@ help:
 	@echo ""
 	@echo "  make clean        - Clean generated files"
 	@echo "  make clean-all    - Clean everything including data"
+	@echo ""
+	@echo "  make web          - Start web service (development, http://localhost:5000)"
+	@echo "  make web-install  - Install web service dependencies"
+	@echo ""
+	@echo "  make docker-build      - Build Docker images (with auto cleanup)"
+	@echo "  make docker-rebuild    - Rebuild from scratch (with cleanup)"
+	@echo "  make docker-up         - Start Docker containers (http://localhost:8080)"
+	@echo "  make docker-down       - Stop Docker containers"
+	@echo "  make docker-logs       - View container logs (last 100 lines)"
+	@echo "  make docker-logs-follow - Follow container logs (real-time)"
+	@echo "  make docker-ps         - Show running containers"
+	@echo "  make docker-clean      - Clean unused containers and images"
+	@echo "  make docker-clean-all  - Deep clean (removes all unused resources)"
+	@echo ""
 	@echo "  make help         - Show this help message"
 
-.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help
+# Web Service
+WEB_DIR = web
+WEB_APP = $(WEB_DIR)/app.py
+
+# Run web service (development)
+web:
+	@echo "Starting DCF Web Service (Development)..."
+	@echo "Open http://localhost:5000 in your browser"
+	@cd $(WEB_DIR) && $(PYTHON) app.py
+
+web-install:
+	@echo "Installing web service dependencies..."
+	@$(PYTHON) -m pip install -r $(WEB_DIR)/requirements.txt
+
+# Docker Commands (Microservices Architecture)
+DOCKER_LOG_DIR = logs/docker
+DOCKER_IMAGE_PREFIX = dcf-project
+
+# Get version from git tag or generate one
+get-version:
+	@./scripts/get_version.sh
+
+# Docker image names
+DOCKER_IMAGES = gateway dcf stock frontend
+
+docker-build:
+	@mkdir -p $(DOCKER_LOG_DIR)
+	@VERSION=$$(./scripts/get_version.sh); \
+	LOG_FILE="$(DOCKER_LOG_DIR)/docker-build-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Building Docker images for microservices..." | tee -a $$LOG_FILE; \
+	echo "Version: $$VERSION" | tee -a $$LOG_FILE; \
+	echo "Log file: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	echo "Timestamp: $$(date '+%Y-%m-%d %H:%M:%S')" | tee -a $$LOG_FILE; \
+	echo "========================================" | tee -a $$LOG_FILE; \
+	echo "Removing old versioned images..." | tee -a $$LOG_FILE; \
+	for img in $(DOCKER_IMAGES); do \
+		docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$(DOCKER_IMAGE_PREFIX)-$$img:" | grep -v "$$VERSION" | xargs -r docker rmi -f 2>&1 | tee -a $$LOG_FILE || true; \
+	done; \
+	echo "Building images with tag: $$VERSION" | tee -a $$LOG_FILE; \
+	VERSION=$$VERSION docker-compose build 2>&1 | tee -a $$LOG_FILE; \
+	BUILD_EXIT=$$?; \
+	if [ $$BUILD_EXIT -eq 0 ]; then \
+		echo "Tagging images with version $$VERSION..." | tee -a $$LOG_FILE; \
+		for img in $(DOCKER_IMAGES); do \
+			IMAGE_NAME="$(DOCKER_IMAGE_PREFIX)-$$img"; \
+			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
+				docker tag $$IMAGE_NAME:latest $$IMAGE_NAME:$$VERSION 2>&1 | tee -a $$LOG_FILE || true; \
+			fi; \
+		done; \
+	fi; \
+	echo "" | tee -a $$LOG_FILE; \
+	echo "Cleaning up unused images and containers..." | tee -a $$LOG_FILE; \
+	docker-compose down --remove-orphans 2>&1 | tee -a $$LOG_FILE || true; \
+	docker image prune -f --filter "dangling=true" 2>&1 | tee -a $$LOG_FILE || true; \
+	echo "✓ Build completed and cleanup done" | tee -a $$LOG_FILE; \
+	echo "Version: $$VERSION" | tee -a $$LOG_FILE; \
+	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	exit $$BUILD_EXIT
+
+docker-rebuild:
+	@mkdir -p $(DOCKER_LOG_DIR)
+	@VERSION=$$(./scripts/get_version.sh); \
+	LOG_FILE="$(DOCKER_LOG_DIR)/docker-rebuild-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Rebuilding Docker images (with cleanup)..." | tee -a $$LOG_FILE; \
+	echo "Version: $$VERSION" | tee -a $$LOG_FILE; \
+	echo "Log file: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	echo "Timestamp: $$(date '+%Y-%m-%d %H:%M:%S')" | tee -a $$LOG_FILE; \
+	echo "========================================" | tee -a $$LOG_FILE; \
+	echo "Stopping containers..." | tee -a $$LOG_FILE; \
+	docker-compose down --remove-orphans 2>&1 | tee -a $$LOG_FILE || true; \
+	echo "Removing old containers..." | tee -a $$LOG_FILE; \
+	docker-compose rm -f 2>&1 | tee -a $$LOG_FILE || true; \
+	echo "Removing old versioned images..." | tee -a $$LOG_FILE; \
+	for img in $(DOCKER_IMAGES); do \
+		docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$(DOCKER_IMAGE_PREFIX)-$$img:" | xargs -r docker rmi -f 2>&1 | tee -a $$LOG_FILE || true; \
+	done; \
+	echo "Cleaning up unused images..." | tee -a $$LOG_FILE; \
+	docker image prune -f --filter "dangling=true" 2>&1 | tee -a $$LOG_FILE || true; \
+	echo "Building new images (--no-cache) with tag: $$VERSION..." | tee -a $$LOG_FILE; \
+	VERSION=$$VERSION docker-compose build --no-cache 2>&1 | tee -a $$LOG_FILE; \
+	BUILD_EXIT=$$?; \
+	if [ $$BUILD_EXIT -eq 0 ]; then \
+		echo "Tagging images with version $$VERSION..." | tee -a $$LOG_FILE; \
+		for img in $(DOCKER_IMAGES); do \
+			IMAGE_NAME="$(DOCKER_IMAGE_PREFIX)-$$img"; \
+			if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$IMAGE_NAME:latest"; then \
+				docker tag $$IMAGE_NAME:latest $$IMAGE_NAME:$$VERSION 2>&1 | tee -a $$LOG_FILE || true; \
+			fi; \
+		done; \
+	fi; \
+	echo "✓ Rebuild completed" | tee -a $$LOG_FILE; \
+	echo "Version: $$VERSION" | tee -a $$LOG_FILE; \
+	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	exit $$BUILD_EXIT
+
+docker-up:
+	@echo "Starting Docker microservices..."
+	@docker-compose up -d
+	@echo ""
+	@echo "Microservices started:"
+	@echo "  - Frontend: http://localhost:8080"
+	@echo "  - Gateway: http://localhost:8000"
+	@echo "  - DCF Service: http://localhost:8001"
+	@echo "  - Stock Service: http://localhost:8002"
+	@echo ""
+	@echo "View logs: make docker-logs"
+	@echo "Stop: make docker-down"
+
+docker-down:
+	@echo "Stopping Docker containers..."
+	@docker-compose down
+
+# Git tag management
+git-tag:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Usage: make git-tag VERSION=v1.0.0"; \
+		echo "Example: make git-tag VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@./scripts/create_git_tag.sh $(VERSION)
+
+# List Docker images with versions
+docker-images:
+	@echo "Docker Images:"
+	@echo "=============="
+	@for img in $(DOCKER_IMAGES); do \
+		echo ""; \
+		echo "$$img:"; \
+		docker images --format "  {{.Repository}}:{{.Tag}} ({{.Size}}, {{.CreatedAt}})" | grep "^$(DOCKER_IMAGE_PREFIX)-$$img:" | head -10; \
+	done
+
+# Remove old Docker images (keep last N versions)
+docker-clean-old:
+	@if [ -z "$(KEEP)" ]; then \
+		echo "Usage: make docker-clean-old KEEP=3"; \
+		echo "Keeps last 3 versions of each image"; \
+		exit 1; \
+	fi
+	@echo "Removing old Docker images (keeping last $(KEEP) versions)..."
+	@for img in $(DOCKER_IMAGES); do \
+		echo "Processing $$img..."; \
+		docker images --format "{{.Repository}}:{{.Tag}} {{.CreatedAt}}" | grep "^$(DOCKER_IMAGE_PREFIX)-$$img:" | \
+		sort -k2 -r | tail -n +$$((KEEP + 1)) | awk '{print $$1}' | \
+		xargs -r docker rmi -f || true; \
+	done
+	@echo "✓ Cleanup completed"
+
+docker-logs:
+	@mkdir -p $(DOCKER_LOG_DIR)
+	@LOG_FILE="$(DOCKER_LOG_DIR)/docker-logs-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Saving container logs to: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	echo "Timestamp: $$(date '+%Y-%m-%d %H:%M:%S')" | tee -a $$LOG_FILE; \
+	echo "========================================" | tee -a $$LOG_FILE; \
+	docker-compose logs --tail=100 2>&1 | tee -a $$LOG_FILE; \
+	echo "" | tee -a $$LOG_FILE; \
+	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE
+
+docker-logs-follow:
+	@docker-compose logs -f
+
+docker-logs-gateway:
+	@docker-compose logs -f gateway
+
+docker-logs-dcf:
+	@docker-compose logs -f dcf
+
+docker-logs-stock:
+	@docker-compose logs -f stock
+
+docker-logs-frontend:
+	@docker-compose logs -f frontend
+
+docker-restart:
+	@echo "Restarting Docker containers..."
+	@docker-compose restart
+
+docker-clean:
+	@mkdir -p $(DOCKER_LOG_DIR)
+	@LOG_FILE="$(DOCKER_LOG_DIR)/docker-clean-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Cleaning Docker containers and images..." | tee -a $$LOG_FILE; \
+	echo "Log file: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	echo "Timestamp: $$(date '+%Y-%m-%d %H:%M:%S')" | tee -a $$LOG_FILE; \
+	echo "========================================" | tee -a $$LOG_FILE; \
+	docker-compose down -v --remove-orphans 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing unused images..." | tee -a $$LOG_FILE; \
+	docker image prune -f --filter "dangling=true" 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing unused containers..." | tee -a $$LOG_FILE; \
+	docker container prune -f 2>&1 | tee -a $$LOG_FILE; \
+	echo "✓ Cleanup completed" | tee -a $$LOG_FILE; \
+	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE
+
+docker-clean-all:
+	@mkdir -p $(DOCKER_LOG_DIR)
+	@LOG_FILE="$(DOCKER_LOG_DIR)/docker-clean-all-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Deep cleaning Docker (removes all unused resources)..." | tee -a $$LOG_FILE; \
+	echo "Log file: $$LOG_FILE" | tee -a $$LOG_FILE; \
+	echo "Timestamp: $$(date '+%Y-%m-%d %H:%M:%S')" | tee -a $$LOG_FILE; \
+	echo "========================================" | tee -a $$LOG_FILE; \
+	docker-compose down -v --remove-orphans 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing all unused images (not just dangling)..." | tee -a $$LOG_FILE; \
+	docker image prune -af 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing all unused containers..." | tee -a $$LOG_FILE; \
+	docker container prune -f 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing unused networks..." | tee -a $$LOG_FILE; \
+	docker network prune -f 2>&1 | tee -a $$LOG_FILE; \
+	echo "Removing unused volumes..." | tee -a $$LOG_FILE; \
+	docker volume prune -f 2>&1 | tee -a $$LOG_FILE; \
+	echo "✓ Deep cleanup completed" | tee -a $$LOG_FILE; \
+	echo "Log saved to: $$LOG_FILE" | tee -a $$LOG_FILE
+
+docker-ps:
+	@docker-compose ps
+
+docker-exec-gateway:
+	@docker-compose exec gateway /bin/bash
+
+docker-exec-dcf:
+	@docker-compose exec dcf /bin/bash
+
+docker-exec-stock:
+	@docker-compose exec stock /bin/bash
+
+docker-exec-frontend:
+	@docker-compose exec frontend /bin/sh
+
+.PHONY: test ut complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend
 

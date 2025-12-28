@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCF Analysis Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 DCF Valuation Dashboard</h1>
+            <p class="subtitle">Phân tích định giá cổ phiếu VN30</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">Tổng số mã:</span>
+                <span class="status-value" id="total-stocks">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Đã phân tích:</span>
+                <span class="status-value" id="analyzed-stocks">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Đang chạy:</span>
+                <span class="status-value running" id="running-stocks">-</span>
+            </div>
+            <button class="btn-refresh" onclick="loadStocks()">🔄 Refresh</button>
+        </div>
+
+        <div class="filters">
+            <input type="text" id="search-input" placeholder="🔍 Tìm kiếm mã cổ phiếu..." onkeyup="filterStocks()">
+            <select id="filter-status" onchange="filterStocks()">
+                <option value="all">Tất cả</option>
+                <option value="has-result">Đã phân tích</option>
+                <option value="no-result">Chưa phân tích</option>
+                <option value="running">Đang chạy</option>
+            </select>
+        </div>
+
+        <div class="stocks-grid" id="stocks-grid">
+            <div class="loading">Đang tải dữ liệu...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+
