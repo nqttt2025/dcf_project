@@ -1,0 +1,134 @@
+version: '3.8'
+
+# Docker Compose for Development - Hot Reload Mode
+# Usage: docker-compose -f docker-compose.dev.yml up
+# This mounts source code as volumes for hot reload
+
+services:
+  # API Gateway - Routes requests to microservices
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+      args:
+        - VERSION=dev
+    image: dcf-project-gateway:dev
+    container_name: dcf-gateway-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DCF_SERVICE_URL=http://dcf:8001
+      - STOCK_SERVICE_URL=http://stock:8002
+      - APP_VERSION=dev
+    volumes:
+      # Mount source code for hot reload
+      - ./services/gateway:/app
+      - ./src:/app/src:ro
+    depends_on:
+      - dcf
+      - stock
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # DCF Service - Handles DCF analysis
+  dcf:
+    build:
+      context: .
+      dockerfile: services/dcf/Dockerfile
+      args:
+        - VERSION=dev
+    image: dcf-project-dcf:dev
+    container_name: dcf-service-dev
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_VERSION=dev
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+      # Mount source code for hot reload
+      - ./services/dcf:/app
+      - ./src:/app/src
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Stock Service - Manages stock data
+  stock:
+    build:
+      context: .
+      dockerfile: services/stock/Dockerfile
+      args:
+        - VERSION=dev
+    image: dcf-project-stock:dev
+    container_name: dcf-stock-dev
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_VERSION=dev
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+      # Mount source code for hot reload
+      - ./services/stock:/app
+      - ./src:/app/src
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend Service - Nginx serving static files
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+      args:
+        - VERSION=dev
+    image: dcf-project-frontend:dev
+    container_name: dcf-frontend-dev
+    ports:
+      - "8080:80"
+    depends_on:
+      - gateway
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  dcf-network:
+    driver: bridge
+
+volumes:
+  dcf-data:
+    driver: local
+

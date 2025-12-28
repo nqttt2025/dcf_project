@@ -7,6 +7,16 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
+import sys
+from pathlib import Path
+
+# Add project root to path for local development
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    # Local development: go up from services/gateway/main.py to project root
+    project_root = Path(__file__).parent.parent.parent
+    sys.path.insert(0, str(project_root))
 
 app = FastAPI(title="DCF Analysis API Gateway")
 

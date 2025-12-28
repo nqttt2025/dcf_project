@@ -11,7 +11,12 @@ from pathlib import Path
 from datetime import datetime
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent
+# Handle both Docker (/app) and local development
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    # Local development: go up from services/dcf/main.py to project root
+    project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.dcf_calculator import calculate_dcf_from_config

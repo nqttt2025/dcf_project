@@ -391,6 +391,62 @@ docker-up:
 	@echo "View logs: make docker-logs"
 	@echo "Stop: make docker-down"
 
+# Development mode with hot reload
+docker-dev:
+	@echo "Starting Docker microservices in DEVELOPMENT mode (hot reload)..."
+	@echo "⚠️  Code changes will be reflected automatically (no rebuild needed)"
+	@docker-compose -f docker-compose.dev.yml up -d
+	@echo ""
+	@echo "Development services started:"
+	@echo "  - Frontend: http://localhost:8080"
+	@echo "  - Gateway: http://localhost:8000 (hot reload enabled)"
+	@echo "  - DCF Service: http://localhost:8001 (hot reload enabled)"
+	@echo "  - Stock Service: http://localhost:8002 (hot reload enabled)"
+	@echo ""
+	@echo "View logs: make docker-dev-logs"
+	@echo "Stop: make docker-dev-down"
+	@echo ""
+	@echo "💡 Tip: Edit code in services/*/main.py or src/ and changes will auto-reload!"
+
+docker-dev-down:
+	@echo "Stopping development Docker containers..."
+	@docker-compose -f docker-compose.dev.yml down
+
+docker-dev-logs:
+	@echo "Showing development container logs..."
+	@docker-compose -f docker-compose.dev.yml logs --tail=100 -f
+
+docker-dev-restart:
+	@echo "Restarting development services..."
+	@docker-compose -f docker-compose.dev.yml restart
+
+# Run backend services locally (fastest - no Docker)
+backend-dev:
+	@echo "Starting backend services locally (fastest development mode)..."
+	@echo "⚠️  This runs services directly on host (no Docker)"
+	@echo "⚠️  Make sure you have dependencies installed: pip install -r services/common/requirements.txt"
+	@echo ""
+	@./scripts/run_backend_dev.sh
+
+# Run individual backend service locally
+backend-gateway:
+	@echo "Starting Gateway service locally..."
+	@PYTHONPATH="$$(pwd):$$(pwd)/src" \
+	cd services/gateway && \
+	uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+backend-dcf:
+	@echo "Starting DCF service locally..."
+	@PYTHONPATH="$$(pwd):$$(pwd)/src" \
+	cd services/dcf && \
+	uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+backend-stock:
+	@echo "Starting Stock service locally..."
+	@PYTHONPATH="$$(pwd):$$(pwd)/src" \
+	cd services/stock && \
+	uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
 docker-down:
 	@echo "Stopping Docker containers..."
 	@VERSION=$$(./scripts/get_version.sh); \
