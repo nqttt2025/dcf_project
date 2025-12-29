@@ -201,6 +201,33 @@ docker-logs-stock:
 docker-logs-frontend:
 	@./scripts/docker.sh logs-frontend
 
+docker-logs-database:
+	@./scripts/docker.sh logs-database
+
+docker-logs-postgres:
+	@./scripts/docker.sh logs-postgres
+
+docker-exec-database:
+	@./scripts/docker.sh exec-database
+
+docker-exec-postgres:
+	@./scripts/docker.sh exec-postgres
+
+docker-db-start:
+	@./scripts/docker.sh db-start
+
+docker-db-stop:
+	@./scripts/docker.sh db-stop
+
+docker-db-restart:
+	@./scripts/docker.sh db-restart
+
+docker-db-status:
+	@./scripts/docker.sh db-status
+
+health-check:
+	@./scripts/health_check.sh
+
 docker-restart:
 	@./scripts/docker.sh restart
 
@@ -350,9 +377,22 @@ help:
 	@echo "  make docker-down       - Stop Docker containers"
 	@echo "  make docker-logs       - View container logs (last 100 lines)"
 	@echo "  make docker-logs-follow - Follow container logs (real-time)"
+	@echo "  make docker-logs-database - View database service logs"
+	@echo "  make docker-logs-postgres - View PostgreSQL logs"
 	@echo "  make docker-ps         - Show running containers"
 	@echo "  make docker-clean      - Clean unused containers and images"
 	@echo "  make docker-clean-all  - Deep clean (removes all unused resources)"
+	@echo ""
+	@echo "Database Management:"
+	@echo "  make docker-db-start    - Start database services (PostgreSQL + Database)"
+	@echo "  make docker-db-stop     - Stop database services"
+	@echo "  make docker-db-restart  - Restart database services"
+	@echo "  make docker-db-status   - Show database services status"
+	@echo "  make docker-exec-database - Exec into database container"
+	@echo "  make docker-exec-postgres - Exec into postgres container"
+	@echo ""
+	@echo "Health Check:"
+	@echo "  make health-check         - Check health status of all services"
 	@echo ""
 	@echo "  make docker-dev              - Start services in DEV mode (hot reload, no rebuild)"
 	@echo "  make docker-dev-down         - Stop dev services"
@@ -369,4 +409,4 @@ help:
 	@echo "Note: Most commands delegate to scripts/ for better maintainability."
 	@echo "      See scripts/*.sh for implementation details."
 
-.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
+.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit

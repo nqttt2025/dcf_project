@@ -4,35 +4,81 @@ Hướng dẫn chạy DCF Analysis Web Service với Docker theo mô hình micro
 
 ## Kiến trúc
 
-Dự án được chia thành 2 microservices:
+Dự án được chia thành các microservices:
 
-1. **API Service** (`services/api/`)
-   - Flask backend API
-   - Port: 5000
-   - Xử lý tất cả API requests
+1. **Gateway Service** (`services/gateway/`)
+   - FastAPI API Gateway
+   - Port: 8000
+   - Routes requests to appropriate services
 
-2. **Frontend Service** (`services/frontend/`)
+2. **DCF Service** (`services/dcf/`)
+   - FastAPI DCF Analysis Service
+   - Port: 8001
+   - Handles DCF calculations
+
+3. **Stock Service** (`services/stock/`)
+   - FastAPI Stock Data Service
+   - Port: 8002
+   - Manages stock information
+
+4. **Database Service** (`services/database/`)
+   - FastAPI Database Service
+   - Port: 8003
+   - Manages database operations and sync
+
+5. **Frontend Service** (`services/frontend/`)
    - Nginx serving static files
    - Port: 8080 (mapped to 80 inside container)
    - Reverse proxy cho API requests
+
+6. **PostgreSQL** (`postgres`)
+   - Database server
+   - Port: 5432
+
+7. **Redis** (`redis`)
+   - Cache và status tracking
+   - Port: 6379
 
 ## Cấu trúc
 
 ```
 dcf_project/
 ├── docker-compose.yml          # Orchestration file
+├── docker-compose.dev.yml      # Development mode
 ├── services/
-│   ├── api/
-│   │   ├── Dockerfile         # API service image
-│   │   ├── app.py             # Flask application
-│   │   └── requirements.txt   # Python dependencies
+│   ├── common/
+│   │   ├── Dockerfile.base     # Base image (shared)
+│   │   └── requirements.txt    # Common dependencies
+│   ├── gateway/
+│   │   ├── Dockerfile.gateway  # Gateway service image
+│   │   └── main.py            # FastAPI gateway
+│   ├── dcf/
+│   │   ├── Dockerfile.dcf      # DCF service image
+│   │   └── main.py            # DCF service
+│   ├── stock/
+│   │   ├── Dockerfile.stock    # Stock service image
+│   │   └── main.py            # Stock service
+│   ├── database/
+│   │   ├── Dockerfile.database # Database service image
+│   │   └── main.py            # Database service
 │   └── frontend/
-│       ├── Dockerfile         # Frontend service image
+│       ├── Dockerfile.frontend # Frontend service image
 │       ├── nginx.conf         # Nginx configuration
 │       ├── index.html         # Main HTML file
 │       └── static/            # CSS, JS files
 └── .dockerignore              # Docker ignore file
 ```
+
+## Dockerfile Naming Convention
+
+Để dễ phân biệt và quản lý, các Dockerfile được đặt tên theo service:
+
+- `Dockerfile.base` - Base image (shared)
+- `Dockerfile.gateway` - Gateway service
+- `Dockerfile.dcf` - DCF service
+- `Dockerfile.stock` - Stock service
+- `Dockerfile.database` - Database service
+- `Dockerfile.frontend` - Frontend service
 
 ## Cài đặt và chạy
 
@@ -63,8 +109,22 @@ docker-compose up -d
 ### 3. Truy cập services
 
 - **Frontend**: http://localhost:8080
-- **API**: http://localhost:5000
-- **API Health Check**: http://localhost:5000/health
+- **Gateway**: http://localhost:8000
+- **DCF Service**: http://localhost:8001
+- **Stock Service**: http://localhost:8002
+- **Database Service**: http://localhost:8003
+- **PostgreSQL**: localhost:5432
+- **Redis**: localhost:6379
+
+### 4. Health Check
+
+```bash
+# Check all services
+make health-check
+
+# Or via web interface
+http://localhost:8080/static/health.html
+```
 
 ## Quản lý containers
 
@@ -74,11 +134,13 @@ docker-compose up -d
 # Tất cả services
 make docker-logs
 
-# Chỉ API service
-make docker-logs-api
-
-# Chỉ Frontend service
+# Individual services
+make docker-logs-gateway
+make docker-logs-dcf
+make docker-logs-stock
+make docker-logs-database
 make docker-logs-frontend
+make docker-logs-postgres
 ```
 
 ### Xem trạng thái
@@ -109,11 +171,15 @@ make docker-clean
 ### Exec vào container
 
 ```bash
-# API container
-make docker-exec-api
-
-# Frontend container
+# Service containers
+make docker-exec-gateway
+make docker-exec-dcf
+make docker-exec-stock
+make docker-exec-database
 make docker-exec-frontend
+
+# Database containers
+make docker-exec-postgres
 ```
 
 ## Volumes
@@ -132,12 +198,29 @@ Frontend service proxy API requests đến `http://api:5000` (sử dụng servic
 
 ## Health Checks
 
-Cả hai services đều có health checks:
+Tất cả services đều có health checks:
 
-- **API**: `/health` endpoint
-- **Frontend**: `/health` endpoint
+- **Gateway**: `/health` endpoint (aggregates all services)
+- **DCF Service**: `/health` endpoint
+- **Stock Service**: `/health` endpoint
+- **Database Service**: `/health` endpoint
+- **PostgreSQL**: `pg_isready` health check
+- **Redis**: `redis-cli ping` health check
 
 Docker sẽ tự động restart containers nếu health check fail.
+
+### Health Check Tools
+
+1. **Command Line**: `make health-check`
+   - Checks Docker containers
+   - Checks HTTP endpoints
+   - Checks database connection
+   - Checks Redis connection
+
+2. **Web Dashboard**: `http://localhost:8080/static/health.html`
+   - Real-time monitoring
+   - Auto-refresh (30s)
+   - Visual status indicators
 
 ## Development vs Production
 
@@ -248,12 +331,38 @@ Có thể tích hợp với:
 Build và push images:
 
 ```bash
-docker build -t dcf-api:latest -f services/api/Dockerfile .
-docker build -t dcf-frontend:latest -f services/frontend/Dockerfile .
+# Build base image
+make docker-build-base
+
+# Build all services
+make docker-build
+
+# Build individual service
+docker-compose build gateway
+docker-compose build dcf
+docker-compose build stock
+docker-compose build database
+docker-compose build frontend
+```
+
+## Database Management
+
+```bash
+# Start database services
+make docker-db-start
+
+# Stop database services
+make docker-db-stop
+
+# Restart database services
+make docker-db-restart
+
+# Check database status
+make docker-db-status
 ```
 
 ---
 
-**Version:** 1.0  
-**Last Updated:** 2025-12-28
+**Version:** 2.0  
+**Last Updated:** 2025-12-29
 

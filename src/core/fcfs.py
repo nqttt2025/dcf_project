@@ -9,6 +9,25 @@ from datetime import datetime
 from ..utils.logger import get_logger
 from ..utils.cache_manager import get_cache_manager
 
+# Try to import data fetcher and redis client (optional)
+try:
+    from ..utils.data_fetcher import get_financial_ttm, get_market_data, get_shares_outstanding as get_shares_from_fetcher, save_to_all_caches
+    HAS_DATA_FETCHER = True
+except ImportError:
+    HAS_DATA_FETCHER = False
+    get_financial_ttm = None
+    get_market_data = None
+    get_shares_from_fetcher = None
+    save_to_all_caches = None
+
+try:
+    from ..utils.redis_client import get_redis_client
+    redis_client = get_redis_client()
+    HAS_REDIS = redis_client._client is not None if redis_client else False
+except ImportError:
+    HAS_REDIS = False
+    redis_client = None
+
 # Optional imports - only import if available
 try:
     import cloudscraper
@@ -365,6 +384,17 @@ def get_free_cash_flow(ticker, use_ttm=True):
 
         # Cache kết quả với key riêng để phân biệt với TTM
         cache_manager.set_with_timestamp(ticker, "fcf", fcf)
+        
+        # Also cache to Redis if available
+        if HAS_REDIS and redis_client:
+            try:
+                redis_client.cache_financial_ttm(ticker, {
+                    'ttm_fcf': fcf,
+                    'source': 'vnstock_api'
+                })
+            except:
+                pass
+        
         return float(fcf)
 
     except Exception as e:
@@ -378,6 +408,17 @@ def get_free_cash_flow(ticker, use_ttm=True):
         return None
 
 def get_shares_outstanding(ticker):
+    """
+    Get shares outstanding with priority: Database → Redis → File → vnstock API
+    """
+    ticker = ticker.upper()
+    
+    # Try priority sources first
+    if HAS_DATA_FETCHER:
+        shares = get_shares_from_fetcher(ticker)
+        if shares:
+            return shares
+    
     # Default shares fallback (FPT shares outstanding as of DEC-26-2025)
     default_shares = 1703507121
     
@@ -414,8 +455,16 @@ def get_shares_outstanding(ticker):
                 # Par value (mệnh giá) of FPT shares is 10,000 VND per share
                 par_value = 10000
                 shares_count = float(shares_capital) / par_value
-                logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from charter capital {shares_capital:,.0f} VND)")
+                    logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from charter capital {shares_capital:,.0f} VND)")
                 cache_manager.set_with_timestamp(ticker, "shares", shares_count)
+                
+                # Cache to Redis
+                if HAS_REDIS and redis_client:
+                    try:
+                        redis_client.cache_shares(ticker, shares_count, par_value=par_value)
+                    except:
+                        pass
+                
                 return shares_count
 
         # Alternative column names to check
@@ -436,8 +485,16 @@ def get_shares_outstanding(ticker):
                     par_value = 10000
                     shares_count = float(capital_value) / par_value
                     logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from {col_name} {capital_value:,.0f} VND, par_value {par_value:,} VND)")
-                    cache_manager.set_with_timestamp(ticker, "shares", shares_count)
-                    return shares_count
+                cache_manager.set_with_timestamp(ticker, "shares", shares_count)
+                
+                # Cache to Redis
+                if HAS_REDIS and redis_client:
+                    try:
+                        redis_client.cache_shares(ticker, shares_count, par_value=par_value)
+                    except:
+                        pass
+                
+                return shares_count
         
         # Check for direct shares outstanding (already in number of shares)
         alt_names_shares = [
@@ -450,8 +507,16 @@ def get_shares_outstanding(ticker):
                 shares_valid = (HAS_PANDAS and pd.notna(shares)) or (not HAS_PANDAS and shares is not None)
                 if shares_valid and shares > 0:
                     logger.info(f"Fetched shares outstanding for {ticker}: {shares:,.0f} (direct from {col_name})")
-                    shares_value = float(shares)
+                shares_value = float(shares)
                     cache_manager.set_with_timestamp(ticker, "shares", shares_value)
+                    
+                    # Cache to Redis
+                    if HAS_REDIS and redis_client:
+                        try:
+                            redis_client.cache_shares(ticker, shares_value, calculation_method=col_name)
+                        except:
+                            pass
+                    
                     return shares_value
         
         # 'Capital and reserves' is total equity, not shares - skip it
@@ -567,6 +632,17 @@ def price_board_stock(ticker):
             if price > 0:
                 logger.info(f"Fetched price for {ticker}: {price}")
                 cache_manager.set_with_timestamp(ticker, "price", price)
+                
+                # Cache to Redis
+                if HAS_REDIS and redis_client:
+                    try:
+                        redis_client.cache_market_data(ticker, {
+                            'current_price': price,
+                            'source': 'vnstock_api'
+                        })
+                    except:
+                        pass
+                
                 return price
 
         logger.warning(f"No valid price data in response for {ticker}")

@@ -53,6 +53,24 @@ SQL migration script cho improvements.
 - Useful views
 - stock_metadata table
 
+### 6. [Redis Cache Strategy](REDIS_CACHE_STRATEGY.md) ⭐
+Chiến lược caching với Redis cho DCF Project.
+
+**Nội dung:**
+- Redis keys structure
+- Data fetching priority (Database → Redis → File → API)
+- TTL configuration
+- Cache invalidation strategy
+
+### 7. [Database Integration](DATABASE_INTEGRATION.md)
+Tổng hợp về database integration.
+
+**Nội dung:**
+- Integration summary
+- Service connections
+- Health checks
+- Frontend monitoring
+
 ## 🏗️ Database Architecture
 
 ### Schema Overview

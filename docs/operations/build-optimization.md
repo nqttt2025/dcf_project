@@ -112,10 +112,14 @@ make docker-rebuild
 
 Nếu muốn rebuild base image:
 ```bash
+make docker-build-base
+# hoặc
 docker-compose build base
 ```
 
 Base image sẽ được cache và reuse cho các services khác.
+
+**Lưu ý**: Base image chỉ rebuild khi `services/common/requirements.txt` thay đổi (detected via SHA256 hash).
 
 ## Tips
 
@@ -169,7 +173,29 @@ docker-compose build gateway
 
 # Build chỉ dcf service
 docker-compose build dcf
+
+# Build chỉ stock service
+docker-compose build stock
+
+# Build chỉ database service
+docker-compose build database
+
+# Build chỉ frontend
+docker-compose build frontend
 ```
+
+## Dockerfile Naming Convention
+
+Để dễ phân biệt và quản lý, các Dockerfile được đặt tên theo service:
+
+- `services/common/Dockerfile.base` - Base image (shared)
+- `services/gateway/Dockerfile.gateway` - Gateway service
+- `services/dcf/Dockerfile.dcf` - DCF service
+- `services/stock/Dockerfile.stock` - Stock service
+- `services/database/Dockerfile.database` - Database service
+- `services/frontend/Dockerfile.frontend` - Frontend service
+
+Tất cả dockerfile paths đã được cập nhật trong `docker-compose.yml` và `docker-compose.dev.yml`.
 
 ---
 

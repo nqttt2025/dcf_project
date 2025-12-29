@@ -42,7 +42,7 @@ Database Service là một microservice mới được thiết kế để quản
 ```
 services/database/
 ├── main.py                 # FastAPI application
-├── Dockerfile              # Docker image
+├── Dockerfile.database     # Docker image
 ├── requirements.txt        # Dependencies
 ├── models/                 # SQLAlchemy models
 │   ├── __init__.py
@@ -287,7 +287,7 @@ services:
   database-service:
     build:
       context: .
-      dockerfile: services/database/Dockerfile
+      dockerfile: services/database/Dockerfile.database
     image: dcf-project-database:latest
     container_name: dcf-database-service
     ports:

@@ -32,6 +32,7 @@ app.add_middleware(
 # Service URLs from environment variables
 DCF_SERVICE_URL = os.getenv("DCF_SERVICE_URL", "http://dcf:8001")
 STOCK_SERVICE_URL = os.getenv("STOCK_SERVICE_URL", "http://stock:8002")
+DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database:8003")
 
 @app.get("/")
 def root():
@@ -54,22 +55,42 @@ async def health_check():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{DCF_SERVICE_URL}/health", timeout=5.0)
-            services_status["dcf"] = "healthy" if response.status_code == 200 else "unhealthy"
-    except:
-        services_status["dcf"] = "unavailable"
+            services_status["dcf"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
+    except Exception as e:
+        services_status["dcf"] = {"status": "unavailable", "error": str(e)}
     
     # Check Stock service
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{STOCK_SERVICE_URL}/health", timeout=5.0)
-            services_status["stock"] = "healthy" if response.status_code == 200 else "unhealthy"
-    except:
-        services_status["stock"] = "unavailable"
+            services_status["stock"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
+    except Exception as e:
+        services_status["stock"] = {"status": "unavailable", "error": str(e)}
+    
+    # Check Database service
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{DATABASE_SERVICE_URL}/health", timeout=5.0)
+            services_status["database"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
+    except Exception as e:
+        services_status["database"] = {"status": "unavailable", "error": str(e)}
+    
+    # Check database connection directly
+    gateway_db_status = {}
+    try:
+        from src.utils.database_client import check_database_connection, get_database_info
+        db_connected = check_database_connection()
+        gateway_db_status["connected"] = db_connected
+        if db_connected:
+            gateway_db_status["info"] = get_database_info()
+    except Exception as e:
+        gateway_db_status["error"] = str(e)
     
     return {
         "status": "healthy",
         "service": "gateway",
-        "services": services_status
+        "services": services_status,
+        "gateway_database": gateway_db_status
     }
 
 # ==================== Stock Service Routes ====================

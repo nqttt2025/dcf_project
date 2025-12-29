@@ -77,20 +77,43 @@ DCF Analysis Project được tổ chức theo kiến trúc microservices, tươ
   - Real-time progress bars
   - Stock list display
 
-### 5. Redis Service
+### 5. Database Service
+- **Role**: Database operations và data synchronization
+- **Technology**: FastAPI + SQLAlchemy + PostgreSQL
+- **Port**: 8003
+- **Features**:
+  - Database CRUD operations
+  - Data sync với vnstock API
+  - Database health monitoring
+  - Table statistics
+- **Database**: PostgreSQL 15 (port 5432)
+
+### 6. Redis Service
 - **Role**: Real-time status tracking và caching
 - **Technology**: Redis 7-alpine
 - **Port**: 6379
 - **Features**:
-  - Analysis status tracking
+  - Analysis status tracking (`analysis:{ticker}`)
+  - Data caching (`stock:{ticker}:*`)
   - Progress updates caching
   - TTL-based expiration
-- **Usage**: DCF và Stock services read/write status
+- **Usage**: DCF và Stock services read/write status và cache data
 
-### 6. Common (`services/common/`)
-- **Role**: Shared Dockerfile và requirements.txt
+### 7. PostgreSQL Database
+- **Role**: Persistent data storage
+- **Technology**: PostgreSQL 15-alpine
+- **Port**: 5432
+- **Features**:
+  - Stock information
+  - Financial data
+  - Market data
+  - DCF results
+  - Sync logs
+
+### 8. Common (`services/common/`)
+- **Role**: Shared Dockerfile.base và requirements.txt
 - **Purpose**: Base image cho các Python services
-- **Dependencies**: Python 3.11 + common packages (FastAPI, pandas, redis, etc.)
+- **Dependencies**: Python 3.11 + common packages (FastAPI, pandas, redis, SQLAlchemy, etc.)
 
 ## Communication Flow
 

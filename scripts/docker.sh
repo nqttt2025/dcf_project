@@ -211,9 +211,12 @@ cmd_up() {
     echo "  - Gateway: http://localhost:8000"
     echo "  - DCF Service: http://localhost:8001"
     echo "  - Stock Service: http://localhost:8002"
+    echo "  - Database Service: http://localhost:8003"
+    echo "  - PostgreSQL: localhost:5432"
     echo ""
     echo "View logs: make docker-logs"
     echo "Stop: make docker-down"
+    echo "Database only: make docker-db-start"
 }
 
 cmd_down() {
@@ -323,6 +326,8 @@ show_help() {
     echo "  logs-dcf    - DCF service logs"
     echo "  logs-stock  - Stock service logs"
     echo "  logs-frontend - Frontend logs"
+    echo "  logs-database - Database service logs"
+    echo "  logs-postgres - PostgreSQL logs"
     echo ""
     echo "Cleanup:"
     echo "  clean       - Clean unused containers and images"
@@ -338,6 +343,14 @@ show_help() {
     echo "  exec-dcf     - Exec into dcf container"
     echo "  exec-stock   - Exec into stock container"
     echo "  exec-frontend - Exec into frontend container"
+    echo "  exec-database - Exec into database container"
+    echo "  exec-postgres - Exec into postgres container"
+    echo ""
+    echo "Database Management:"
+    echo "  db-start    - Start database services (PostgreSQL + Database Service)"
+    echo "  db-stop     - Stop database services"
+    echo "  db-restart  - Restart database services"
+    echo "  db-status   - Show database services status"
     echo ""
     echo "Examples:"
     echo "  $0 build"
@@ -387,6 +400,12 @@ main() {
         logs-frontend)
             docker-compose logs -f frontend
             ;;
+        logs-database)
+            docker-compose logs -f database
+            ;;
+        logs-postgres)
+            docker-compose logs -f postgres
+            ;;
         restart)
             log_info "Restarting Docker containers..."
             # Get project version from git tag (single source of truth)
@@ -422,6 +441,34 @@ main() {
         exec-frontend)
             docker-compose exec frontend /bin/sh
             ;;
+        exec-database)
+            docker-compose exec database /bin/bash
+            ;;
+        exec-postgres)
+            docker-compose exec postgres /bin/sh
+            ;;
+        db-start)
+            log_info "Starting database services (PostgreSQL + Database Service)..."
+            docker-compose up -d postgres database
+            echo ""
+            echo "Database services started:"
+            echo "  - PostgreSQL: localhost:5432"
+            echo "  - Database Service: http://localhost:8003"
+            echo ""
+            echo "View logs: make docker-logs-database"
+            ;;
+        db-stop)
+            log_info "Stopping database services..."
+            docker-compose stop postgres database
+            ;;
+        db-restart)
+            log_info "Restarting database services..."
+            docker-compose restart postgres database
+            ;;
+        db-status)
+            log_info "Database services status:"
+            docker-compose ps postgres database
+            ;;
         dev)
             log_info "Starting Docker microservices in DEVELOPMENT mode (hot reload)..."
             log_warn "Code changes will be reflected automatically (no rebuild needed)"
@@ -432,6 +479,8 @@ main() {
             echo "  - Gateway: http://localhost:8000 (hot reload enabled)"
             echo "  - DCF Service: http://localhost:8001 (hot reload enabled)"
             echo "  - Stock Service: http://localhost:8002 (hot reload enabled)"
+            echo "  - Database Service: http://localhost:8003 (hot reload enabled)"
+            echo "  - PostgreSQL: localhost:5432"
             echo ""
             echo "View logs: make docker-dev-logs"
             echo "Stop: make docker-dev-down"

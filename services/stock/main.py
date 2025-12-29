@@ -94,7 +94,20 @@ def root():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "stock-service"}
+    health_status = {"status": "healthy", "service": "stock-service"}
+    
+    # Check database connection if available
+    try:
+        from src.utils.database_client import check_database_connection, get_database_info
+        db_connected = check_database_connection()
+        health_status["database"] = "connected" if db_connected else "disconnected"
+        if db_connected:
+            db_info = get_database_info()
+            health_status["database_info"] = db_info
+    except Exception as e:
+        health_status["database"] = f"error: {str(e)}"
+    
+    return health_status
 
 @app.get("/stocks")
 def list_stocks():

@@ -44,25 +44,33 @@ dcf_project/
 │   │
 │   ├── gateway/                  # API Gateway Service
 │   │   ├── main.py              # FastAPI gateway application
-│   │   ├── Dockerfile           # Gateway Docker image
+│   │   ├── Dockerfile.gateway   # Gateway Docker image
 │   │   └── requirements.txt     # Gateway dependencies
 │   │
 │   ├── dcf/                      # DCF Analysis Service
 │   │   ├── main.py              # DCF service application
-│   │   ├── Dockerfile           # DCF Docker image
+│   │   ├── Dockerfile.dcf       # DCF Docker image
 │   │   └── requirements.txt     # DCF dependencies
 │   │
 │   ├── stock/                    # Stock Data Service
 │   │   ├── main.py              # Stock service application
-│   │   ├── Dockerfile           # Stock Docker image
+│   │   ├── Dockerfile.stock     # Stock Docker image
 │   │   └── requirements.txt     # Stock dependencies
+│   │
+│   ├── database/                 # Database Service
+│   │   ├── main.py              # Database service application
+│   │   ├── Dockerfile.database  # Database Docker image
+│   │   ├── database.py          # Database connection
+│   │   └── models/              # SQLAlchemy models
 │   │
 │   └── frontend/                 # Frontend Service
 │       ├── static/              # Static files (HTML, CSS, JS)
 │       │   ├── css/
 │       │   ├── js/
-│       │   └── index.html
-│       ├── Dockerfile           # Frontend Docker image (Nginx)
+│       │   ├── index.html
+│       │   ├── database.html    # Database monitoring page
+│       │   └── health.html      # Health status page
+│       ├── Dockerfile.frontend  # Frontend Docker image (Nginx)
 │       └── nginx.conf           # Nginx configuration
 │
 ├── scripts/                      # Management scripts
@@ -70,6 +78,7 @@ dcf_project/
 │   ├── docker.sh               # Docker management
 │   ├── docker_version.sh       # Docker versioning
 │   ├── build_base.sh           # Base image builder
+│   ├── health_check.sh         # Health check script
 │   ├── git.sh                   # Git tag management
 │   ├── test.sh                  # Test runner
 │   ├── lint.sh                  # Linting

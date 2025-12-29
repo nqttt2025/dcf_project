@@ -53,6 +53,8 @@ docs/
   - [Database Review](architecture/database/database-review.md) - Review và improvements
   - [Database Migration](architecture/database/database-migration.sql) - Migration script
   - [Database Improvements](architecture/database/database-improvements.sql) - Improvements script
+  - [Redis Cache Strategy](architecture/database/REDIS_CACHE_STRATEGY.md) ⭐ - Caching strategy
+  - [Database Integration](architecture/database/DATABASE_INTEGRATION.md) - Integration summary
 - **[Docker Architecture](architecture/docker.md)** - Docker setup
 - **[Development Guide](architecture/development.md)** - Development workflow
 

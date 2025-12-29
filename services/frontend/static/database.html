@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Monitor - DCF Project</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .database-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            font-weight: normal;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        .health-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .health-status.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        .health-status.unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .health-status.not_configured {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .table-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .table-section h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #495057;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="database-container">
+        <div class="nav-links">
+            <a href="/">← Back to Stocks</a>
+        </div>
+        
+        <h1>Database Monitor</h1>
+        
+        <button class="refresh-btn" onclick="loadDatabaseInfo()">🔄 Refresh</button>
+        
+        <div id="loading" class="loading">Loading database information...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="content" style="display: none;">
+            <!-- Health Status -->
+            <div class="table-section">
+                <h2>Health Status</h2>
+                <div id="health-status"></div>
+            </div>
+            
+            <!-- Database Statistics -->
+            <div class="table-section">
+                <h2>Database Statistics</h2>
+                <div class="stats-grid" id="stats-grid"></div>
+            </div>
+            
+            <!-- Tables -->
+            <div class="table-section">
+                <h2>Tables</h2>
+                <div id="tables-info"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const DATABASE_SERVICE_URL = '/api/database';
+        
+        async function loadDatabaseInfo() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('content').style.display = 'none';
+            
+            try {
+                // Load health status
+                const healthResponse = await fetch(`${DATABASE_SERVICE_URL}/health`);
+                const health = await healthResponse.json();
+                displayHealthStatus(health);
+                
+                // Load database stats
+                const statsResponse = await fetch(`${DATABASE_SERVICE_URL}/stats`);
+                const stats = await statsResponse.json();
+                displayStats(stats);
+                
+                // Load tables
+                const tablesResponse = await fetch(`${DATABASE_SERVICE_URL}/tables`);
+                const tables = await tablesResponse.json();
+                displayTables(tables);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Error loading database info: ${error.message}`;
+            }
+        }
+        
+        function displayHealthStatus(health) {
+            const statusDiv = document.getElementById('health-status');
+            const statusClass = health.status === 'healthy' ? 'healthy' : 'unhealthy';
+            
+            statusDiv.innerHTML = `
+                <div style="margin-bottom: 15px;">
+                    <strong>Overall Status:</strong> 
+                    <span class="health-status ${statusClass}">${health.status.toUpperCase()}</span>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>Database:</strong> 
+                    <span class="health-status ${health.database === 'healthy' ? 'healthy' : 'unhealthy'}">
+                        ${health.database}
+                    </span>
+                </div>
+                <div>
+                    <strong>Redis:</strong> 
+                    <span class="health-status ${health.redis === 'healthy' ? 'healthy' : health.redis === 'not_configured' ? 'not_configured' : 'unhealthy'}">
+                        ${health.redis}
+                    </span>
+                </div>
+                <div style="margin-top: 10px; color: #666; font-size: 12px;">
+                    Last checked: ${new Date(health.timestamp).toLocaleString()}
+                </div>
+            `;
+        }
+        
+        function displayStats(stats) {
+            const statsGrid = document.getElementById('stats-grid');
+            
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Tables</h3>
+                    <div class="value">${stats.total_tables || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Rows</h3>
+                    <div class="value">${(stats.total_rows || 0).toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Database Size</h3>
+                    <div class="value">${stats.database_size || 'N/A'}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>PostgreSQL Version</h3>
+                    <div class="value" style="font-size: 18px;">${(stats.postgres_version || 'N/A').substring(0, 30)}</div>
+                </div>
+            `;
+            
+            // Display table details
+            if (stats.tables && stats.tables.length > 0) {
+                let tablesHTML = '<table><thead><tr><th>Table Name</th><th>Row Count</th><th>Size</th></tr></thead><tbody>';
+                stats.tables.forEach(table => {
+                    tablesHTML += `
+                        <tr>
+                            <td><strong>${table.name}</strong></td>
+                            <td>${typeof table.row_count === 'number' ? table.row_count.toLocaleString() : table.row_count}</td>
+                            <td>${table.size || 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+                tablesHTML += '</tbody></table>';
+                
+                const tablesInfo = document.getElementById('tables-info');
+                tablesInfo.innerHTML = tablesHTML;
+            }
+        }
+        
+        function displayTables(tables) {
+            // This will be populated by displayStats if needed
+            // Additional table structure info can be shown here
+        }
+        
+        // Load on page load
+        loadDatabaseInfo();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadDatabaseInfo, 30000);
+    </script>
+</body>
+</html>
+

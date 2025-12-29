@@ -1,0 +1,28 @@
+# Use base image with common dependencies
+# Base image must be built first: docker-compose build base
+FROM dcf-project-base:latest
+
+# Build argument for version
+ARG VERSION=latest
+ENV APP_VERSION=${VERSION}
+
+WORKDIR /app
+
+# Copy project source code (these change frequently)
+COPY src /app/src
+COPY config /app/config
+COPY data /app/data
+
+# Copy service code
+COPY services/database /app/services/database
+
+# Create necessary directories
+RUN mkdir -p /app/data/results /app/data/cache /app/logs/app /app/logs/docker
+
+LABEL version="${VERSION}"
+LABEL maintainer="DCF Project"
+
+EXPOSE 8003
+
+CMD ["uvicorn", "services.database.main:app", "--host", "0.0.0.0", "--port", "8003"]
+

@@ -10,6 +10,29 @@ version: '3.8'
 # - Parallel builds for multiple services
 
 services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: dcf-postgres
+    environment:
+      - POSTGRES_USER=dcf_user
+      - POSTGRES_PASSWORD=dcf_password
+      - POSTGRES_DB=dcf_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docs/architecture/database/database-migration.sql:/docker-entrypoint-initdb.d/01-migration.sql
+      - ./docs/architecture/database/database-improvements.sql:/docker-entrypoint-initdb.d/02-improvements.sql
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcf_user -d dcf_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Redis Cache Service
   redis:
     image: redis:7-alpine
@@ -44,7 +67,7 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: services/gateway/Dockerfile
+      dockerfile: services/gateway/Dockerfile.gateway
       args:
         - VERSION=${VERSION:-latest}
     image: dcf-project-gateway:${VERSION:-latest}
@@ -54,12 +77,16 @@ services:
     environment:
       - DCF_SERVICE_URL=http://dcf:8001
       - STOCK_SERVICE_URL=http://stock:8002
+      - DATABASE_SERVICE_URL=http://database:8003
+      - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
       - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
     depends_on:
       - redis
+      - postgres
       - dcf
       - stock
+      - database
     networks:
       - dcf-network
     restart: unless-stopped
@@ -74,7 +101,7 @@ services:
   dcf:
     build:
       context: .
-      dockerfile: services/dcf/Dockerfile
+      dockerfile: services/dcf/Dockerfile.dcf
       args:
         - VERSION=${VERSION:-latest}
     image: dcf-project-dcf:${VERSION:-latest}
@@ -84,9 +111,11 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
       - APP_VERSION=${VERSION:-latest}
     depends_on:
       - redis
+      - postgres
     volumes:
       - ./data:/app/data
       - ./config:/app/config
@@ -105,7 +134,7 @@ services:
   stock:
     build:
       context: .
-      dockerfile: services/stock/Dockerfile
+      dockerfile: services/stock/Dockerfile.stock
       args:
         - VERSION=${VERSION:-latest}
     image: dcf-project-stock:${VERSION:-latest}
@@ -115,9 +144,11 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
       - APP_VERSION=${VERSION:-latest}
     depends_on:
       - redis
+      - postgres
     volumes:
       - ./data:/app/data
       - ./config:/app/config
@@ -132,11 +163,44 @@ services:
       retries: 3
       start_period: 10s
 
+  # Database Service - Manages database operations and sync
+  database:
+    build:
+      context: .
+      dockerfile: services/database/Dockerfile.database
+      args:
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-database:${VERSION:-latest}
+    container_name: dcf-database
+    ports:
+      - "8003:8003"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
+      - REDIS_URL=redis://redis:6379/0
+      - APP_VERSION=${VERSION:-latest}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Frontend Service - Nginx serving static files
   frontend:
     build:
       context: .
-      dockerfile: services/frontend/Dockerfile
+      dockerfile: services/frontend/Dockerfile.frontend
       args:
         - VERSION=${VERSION:-latest}
     image: dcf-project-frontend:${VERSION:-latest}
@@ -162,4 +226,6 @@ volumes:
   dcf-data:
     driver: local
   redis-data:
+    driver: local
+  postgres-data:
     driver: local
