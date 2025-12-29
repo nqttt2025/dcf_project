@@ -1,6 +1,8 @@
 # Use base image with common dependencies
 # Base image must be built first: docker-compose build base
-FROM dcf-project-base:latest
+# Build argument for base image version
+ARG BASE_VERSION=latest
+FROM dcf-project-base:${BASE_VERSION}
 
 # Build argument for version
 ARG VERSION=latest

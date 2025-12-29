@@ -52,6 +52,7 @@ services:
       context: .
       dockerfile: services/gateway/Dockerfile.gateway
       args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
         - VERSION=dev
     image: dcf-project-gateway:dev
     container_name: dcf-gateway-dev
@@ -93,6 +94,7 @@ services:
       context: .
       dockerfile: services/dcf/Dockerfile.dcf
       args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
         - VERSION=dev
     image: dcf-project-dcf:dev
     container_name: dcf-service-dev
@@ -132,6 +134,7 @@ services:
       context: .
       dockerfile: services/stock/Dockerfile.stock
       args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
         - VERSION=dev
     image: dcf-project-stock:dev
     container_name: dcf-stock-dev
@@ -171,6 +174,7 @@ services:
       context: .
       dockerfile: services/database/Dockerfile.database
       args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
         - VERSION=dev
     image: dcf-project-database:dev
     container_name: dcf-database-dev
