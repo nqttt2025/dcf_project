@@ -17,8 +17,9 @@ class ResultManager:
     """
 
     def __init__(self):
-        # Get project root (go up 2 levels from src/utils/)
-        self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # Get project root using common utility
+        from .common import get_project_root_str
+        self.project_root = get_project_root_str()
         self.results_dir = os.path.join(self.project_root, 'data', 'results')
         os.makedirs(self.results_dir, exist_ok=True)
 

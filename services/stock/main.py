@@ -1,12 +1,19 @@
 """
 Stock Service - Microservice quản lý thông tin cổ phiếu
 """
-from fastapi import FastAPI, HTTPException
-from typing import List, Optional
-import json
-import os
 import sys
 from pathlib import Path
+
+# Setup project path first (before importing services.common)
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from fastapi import FastAPI, HTTPException
+import json
+import os
 
 # Try to import httpx for syncing with DCF service
 try:
@@ -15,14 +22,8 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-# Add project root to path
-# In Docker container, __file__ is /app/main.py, so we use /app directly
-if Path('/app').exists():
-    project_root = Path('/app')
-else:
-    # Fallback for local development
-    project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# Import common utilities after path setup
+from services.common import create_health_response
 
 from src.utils.result_manager import get_result_manager
 
@@ -31,8 +32,7 @@ app = FastAPI(title="Stock Service")
 # Initialize managers
 result_manager = get_result_manager()
 
-# Initialize paths - ensure they exist
-project_root = Path('/app') if Path('/app').exists() else Path(__file__).parent.parent.parent
+# Initialize paths
 config_dir = project_root / 'config'
 results_dir = project_root / 'data' / 'results'
 
@@ -94,20 +94,7 @@ def root():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
-    health_status = {"status": "healthy", "service": "stock-service"}
-    
-    # Check database connection if available
-    try:
-        from src.utils.database_client import check_database_connection, get_database_info
-        db_connected = check_database_connection()
-        health_status["database"] = "connected" if db_connected else "disconnected"
-        if db_connected:
-            db_info = get_database_info()
-            health_status["database_info"] = db_info
-    except Exception as e:
-        health_status["database"] = f"error: {str(e)}"
-    
-    return health_status
+    return create_health_response("stock-service", include_database=True)
 
 @app.get("/stocks")
 def list_stocks():

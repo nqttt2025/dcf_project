@@ -2,37 +2,79 @@
 API Gateway - Microservice Architecture
 Routes requests to appropriate microservices
 """
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-import httpx
-import os
 import sys
 from pathlib import Path
 
-# Add project root to path for local development
+# Setup project path first (before importing services.common)
 if Path('/app').exists():
     project_root = Path('/app')
 else:
-    # Local development: go up from services/gateway/main.py to project root
     project_root = Path(__file__).parent.parent.parent
-    sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root))
+
+from fastapi import FastAPI, HTTPException
+import httpx
+from typing import Optional
+
+# Import common utilities after path setup
+from services.common import (
+    setup_cors,
+    check_service_health,
+    get_database_health_status,
+    get_service_urls,
+)
 
 app = FastAPI(title="DCF Analysis API Gateway")
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Setup CORS
+setup_cors(app)
 
-# Service URLs from environment variables
-DCF_SERVICE_URL = os.getenv("DCF_SERVICE_URL", "http://dcf:8001")
-STOCK_SERVICE_URL = os.getenv("STOCK_SERVICE_URL", "http://stock:8002")
-DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database:8003")
+# Get service URLs
+service_urls = get_service_urls()
+DCF_SERVICE_URL = service_urls["dcf"]
+STOCK_SERVICE_URL = service_urls["stock"]
+DATABASE_SERVICE_URL = service_urls["database"]
+
+
+async def make_service_request(
+    service_url: str,
+    method: str = "GET",
+    endpoint: str = "",
+    timeout: float = 10.0,
+    json_data: Optional[dict] = None
+):
+    """
+    Make a request to a microservice.
+    
+    Args:
+        service_url: Base URL of the service
+        method: HTTP method (GET, POST, etc.)
+        endpoint: Endpoint path (e.g., "/stocks")
+        timeout: Request timeout in seconds
+        json_data: Optional JSON data for POST requests
+    
+    Returns:
+        Response JSON data
+    
+    Raises:
+        HTTPException: If request fails
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"{service_url}{endpoint}"
+            if method.upper() == "GET":
+                response = await client.get(url, timeout=timeout)
+            elif method.upper() == "POST":
+                response = await client.post(url, json=json_data, timeout=timeout)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
+            
+            if response.status_code not in [200, 201]:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return response.json()
+    except httpx.RequestError as e:
+        service_name = service_url.split("://")[1].split(":")[0] if "://" in service_url else "service"
+        raise HTTPException(status_code=503, detail=f"{service_name} service unavailable: {str(e)}")
 
 @app.get("/")
 def root():
@@ -49,42 +91,15 @@ def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    services_status = {}
-    
-    # Check DCF service
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{DCF_SERVICE_URL}/health", timeout=5.0)
-            services_status["dcf"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
-    except Exception as e:
-        services_status["dcf"] = {"status": "unavailable", "error": str(e)}
-    
-    # Check Stock service
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/health", timeout=5.0)
-            services_status["stock"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
-    except Exception as e:
-        services_status["stock"] = {"status": "unavailable", "error": str(e)}
-    
-    # Check Database service
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{DATABASE_SERVICE_URL}/health", timeout=5.0)
-            services_status["database"] = response.json() if response.status_code == 200 else {"status": "unhealthy"}
-    except Exception as e:
-        services_status["database"] = {"status": "unavailable", "error": str(e)}
+    # Check all services
+    services_status = {
+        "dcf": await check_service_health(DCF_SERVICE_URL),
+        "stock": await check_service_health(STOCK_SERVICE_URL),
+        "database": await check_service_health(DATABASE_SERVICE_URL),
+    }
     
     # Check database connection directly
-    gateway_db_status = {}
-    try:
-        from src.utils.database_client import check_database_connection, get_database_info
-        db_connected = check_database_connection()
-        gateway_db_status["connected"] = db_connected
-        if db_connected:
-            gateway_db_status["info"] = get_database_info()
-    except Exception as e:
-        gateway_db_status["error"] = str(e)
+    gateway_db_status = get_database_health_status()
     
     return {
         "status": "healthy",
@@ -98,86 +113,46 @@ async def health_check():
 @app.get("/api/stocks")
 async def list_stocks():
     """Lấy danh sách tất cả cổ phiếu"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/stocks", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Stock service unavailable: {str(e)}")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", "/stocks")
 
 @app.get("/api/stocks/{ticker}")
 async def get_stock_detail(ticker: str):
     """Lấy thông tin chi tiết của một cổ phiếu"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/stocks/{ticker}", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Stock service unavailable: {str(e)}")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", f"/stocks/{ticker}")
 
 @app.get("/api/stocks/{ticker}/config")
 async def get_stock_config(ticker: str):
     """Lấy config của một cổ phiếu"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/stocks/{ticker}/config", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Stock service unavailable: {str(e)}")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", f"/stocks/{ticker}/config")
 
 @app.get("/api/stocks/{ticker}/status")
 async def get_stock_status(ticker: str):
     """Lấy trạng thái của một cổ phiếu"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/stocks/{ticker}/status", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Stock service unavailable: {str(e)}")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", f"/stocks/{ticker}/status")
 
 @app.get("/api/status")
 async def get_system_status():
     """Lấy trạng thái tổng thể của hệ thống"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{STOCK_SERVICE_URL}/status", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Stock service unavailable: {str(e)}")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", "/status")
 
 # ==================== DCF Service Routes ====================
 
 @app.post("/api/stocks/{ticker}/run")
 async def run_dcf_analysis(ticker: str):
     """Chạy phân tích DCF cho một cổ phiếu"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(f"{DCF_SERVICE_URL}/analyze/{ticker}", timeout=300.0)
-        if response.status_code not in [200, 201]:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"DCF service unavailable: {str(e)}")
+    return await make_service_request(
+        DCF_SERVICE_URL,
+        "POST",
+        f"/analyze/{ticker}",
+        timeout=300.0
+    )
 
 @app.get("/api/analysis/{ticker}")
 async def get_analysis_result(ticker: str):
     """Lấy kết quả phân tích DCF"""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{DCF_SERVICE_URL}/analysis/{ticker}", timeout=10.0)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"DCF service unavailable: {str(e)}")
+    return await make_service_request(
+        DCF_SERVICE_URL,
+        "GET",
+        f"/analysis/{ticker}"
+    )
 

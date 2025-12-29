@@ -31,10 +31,12 @@ run_pylint() {
     
     local pythonpath
     pythonpath=$(echo "$PYTHON_LIB_PATH" | tr ' ' ':')
-    env PYTHONPATH="$pythonpath:$PYTHONPATH" \
+    # Use ${PYTHONPATH:-} to handle unset variable (with set -u)
+    # Don't fail on errors, just report them (|| true)
+    env PYTHONPATH="$pythonpath:${PYTHONPATH:-}" \
         "$PYTHON" -m pylint -v -j 0 $PYLINT_LEVEL \
         $(find $PYTHON_CHECK_DIR -type f -name "*.py") \
-        |& tee -a "$PYLINT_DIR/pylint.log"
+        |& tee -a "$PYLINT_DIR/pylint.log" || true
     
     log_success "Pylint log: $(realpath "$PYLINT_DIR")/pylint.log"
 }

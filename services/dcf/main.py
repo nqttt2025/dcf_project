@@ -1,23 +1,24 @@
 """
 DCF Service - Microservice xử lý phân tích DCF
 """
+import sys
+from pathlib import Path
+
+# Setup project path first (before importing services.common)
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
-import os
-import sys
-from pathlib import Path
 from datetime import datetime
 
-# Add project root to path
-# Handle both Docker (/app) and local development
-if Path('/app').exists():
-    project_root = Path('/app')
-else:
-    # Local development: go up from services/dcf/main.py to project root
-    project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# Import common utilities after path setup
+from services.common import create_health_response
 
 from src.core.dcf_calculator import calculate_dcf_from_config
 from src.utils.result_manager import get_result_manager
@@ -43,20 +44,7 @@ def root():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
-    health_status = {"status": "healthy", "service": "dcf-service"}
-    
-    # Check database connection if available
-    try:
-        from src.utils.database_client import check_database_connection, get_database_info
-        db_connected = check_database_connection()
-        health_status["database"] = "connected" if db_connected else "disconnected"
-        if db_connected:
-            db_info = get_database_info()
-            health_status["database_info"] = db_info
-    except Exception as e:
-        health_status["database"] = f"error: {str(e)}"
-    
-    return health_status
+    return create_health_response("dcf-service", include_database=True)
 
 @app.post("/analyze/{ticker}")
 async def run_analysis(ticker: str, background_tasks: BackgroundTasks):

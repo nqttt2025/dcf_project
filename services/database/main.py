@@ -3,13 +3,25 @@ Database Service - Main FastAPI application
 Manages database operations and data synchronization
 """
 import os
+import sys
+from pathlib import Path
+
+# Setup project path first (before importing services.common)
+if Path('/app').exists():
+    project_root = Path('/app')
+else:
+    project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 from fastapi import FastAPI, Depends, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 from typing import List, Optional
 import redis
 from datetime import datetime
+
+# Import common utilities after path setup
+from services.common import setup_cors, create_health_response
 
 from .database import get_db, engine, Base
 from .models import Stock
@@ -20,14 +32,8 @@ app = FastAPI(
     version=os.getenv("APP_VERSION", "latest")
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Setup CORS
+setup_cors(app)
 
 # Redis connection
 redis_client = None
@@ -57,10 +63,10 @@ async def root():
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     """Health check endpoint"""
+    # Check database connection
+    db_status = "healthy"
     try:
-        # Check database connection
         db.execute(text("SELECT 1"))
-        db_status = "healthy"
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
     
@@ -74,12 +80,15 @@ async def health_check(db: Session = Depends(get_db)):
     else:
         redis_status = "not_configured"
     
-    return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
-        "database": db_status,
-        "redis": redis_status,
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    return create_health_response(
+        "database-service",
+        include_database=False,
+        additional_status={
+            "database": db_status,
+            "redis": redis_status,
+            "overall_status": "healthy" if db_status == "healthy" else "degraded"
+        }
+    )
 
 
 @app.get("/api/database/stats")
