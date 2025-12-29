@@ -272,10 +272,10 @@ cmd_set() {
 cmd_check_base() {
     if check_base_needs_rebuild; then
         echo "rebuild"
-        exit 0
+        return 0
     else
         echo "no-rebuild"
-        exit 1
+        return 0
     fi
 }
 

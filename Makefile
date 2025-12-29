@@ -55,6 +55,26 @@ test-scripts-bash:
 test-scripts-python:
 	@python3 tests/scripts/test_python_scripts.py
 
+test-makefile:
+	@echo "Testing Makefile commands..."
+	@./tests/makefile/test_makefile_commands.sh
+	@./tests/makefile/test_makefile_functionality.sh
+
+test-makefile-commands:
+	@./tests/makefile/test_makefile_commands.sh
+
+test-makefile-functionality:
+	@./tests/makefile/test_makefile_functionality.sh
+
+test-makefile-all:
+	@echo "Running all Makefile tests..."
+	@./tests/makefile/test_makefile_commands.sh
+	@./tests/makefile/test_makefile_functionality.sh
+	@./tests/makefile/test_makefile_duplicates.sh
+	@./tests/makefile/test_all_commands.sh
+	@echo ""
+	@echo "All Makefile tests completed!"
+
 # ============================================================================
 # DCF Analysis Commands
 # ============================================================================
@@ -63,7 +83,7 @@ dcf:
 	@if [ -z "$(TICKER)" ]; then \
 		echo "Usage: make dcf TICKER=<ticker>"; \
 		echo "Example: make dcf TICKER=VNM"; \
-		./scripts/dcf.sh help; \
+		./scripts/analysis/dcf.sh help; \
 		exit 1; \
 	fi
 	@./scripts/analysis/dcf.sh single $(TICKER)
@@ -84,7 +104,7 @@ dcf-help:
 pe:
 	@if [ -z "$(TICKER)" ]; then \
 		echo "Usage: make pe TICKER=<ticker> [INDUSTRY=<industry>]"; \
-		./scripts/pe.sh help; \
+		./scripts/analysis/pe.sh help; \
 		exit 1; \
 	fi
 	@./scripts/analysis/pe.sh single $(TICKER) $(INDUSTRY)
@@ -334,16 +354,16 @@ git-tag:
 	@./scripts/git.sh tag $(VERSION)
 
 git-tag-patch:
-	@./scripts/git.sh tag-patch
+	@NON_INTERACTIVE=1 ./scripts/git.sh tag-patch
 
 git-tag-minor:
-	@./scripts/git.sh tag-minor
+	@NON_INTERACTIVE=1 ./scripts/git.sh tag-minor
 
 git-tag-major:
-	@./scripts/git.sh tag-major
+	@NON_INTERACTIVE=1 ./scripts/git.sh tag-major
 
 git-tag-from-commit:
-	@./scripts/git.sh tag-from-commit
+	@NON_INTERACTIVE=1 ./scripts/git.sh tag-from-commit
 
 # ============================================================================
 # Help
@@ -423,4 +443,4 @@ help:
 	@echo "Note: Most commands delegate to scripts/ for better maintainability."
 	@echo "      See scripts/*.sh for implementation details."
 
-.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
+.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python test-makefile test-makefile-commands test-makefile-functionality test-makefile-all lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit

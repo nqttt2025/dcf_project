@@ -57,11 +57,16 @@ fi
 
 # Check for uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
-    echo "Warning: You have uncommitted changes!"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    echo "Warning: You have uncommitted changes!" >&2
+    # Check if running in non-interactive mode (from Makefile or CI)
+    if [ -t 0 ] && [ -z "${NON_INTERACTIVE:-}" ]; then
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        echo "Non-interactive mode: Continuing with uncommitted changes..." >&2
     fi
 fi
 
@@ -69,10 +74,11 @@ fi
 git tag -a "$NEW_VERSION" -m "Release version $NEW_VERSION"
 
 # Sync Docker versions with new git tag
-echo "Syncing Docker versions with git tag: $NEW_VERSION"
-    "$PROJECT_ROOT/scripts/version/docker_version.sh" sync-git >/dev/null 2>&1 || true
+echo "Syncing Docker versions with git tag: $NEW_VERSION" >&2
+"$PROJECT_ROOT/scripts/version/docker_version.sh" sync-git >/dev/null 2>&1 || true
 
-echo "✓ Created tag: $NEW_VERSION"
-echo "✓ Docker versions synced"
-echo "To push tag: git push origin $NEW_VERSION"
+echo "✓ Created tag: $NEW_VERSION" >&2
+echo "✓ Docker versions synced" >&2
+echo "To push tag: git push origin $NEW_VERSION" >&2
+# Output version to stdout (for scripts that capture it)
 echo "$NEW_VERSION"

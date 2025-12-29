@@ -23,4 +23,5 @@ source "$LIB_DIR/python_utils.sh"
 source "$LIB_DIR/docker_utils.sh"
 source "$LIB_DIR/display.sh"
 source "$LIB_DIR/version.sh"
+source "$LIB_DIR/base_script.sh"
 

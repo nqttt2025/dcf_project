@@ -18,6 +18,12 @@ cd "$PROJECT_ROOT"
 # Source common utilities
 source "$PROJECT_ROOT/scripts/lib/common.sh"
 
+# Check if tag already exists
+if git rev-parse "$VERSION" >/dev/null 2>&1; then
+    log_error "Tag $VERSION already exists!"
+    exit 1
+fi
+
 # Create git tag
 git tag "$VERSION"
 

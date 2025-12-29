@@ -9,8 +9,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     exit 1
 fi
 
-# Source common library
-source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+# Note: base_script.sh is loaded by common.sh, so we don't need to source common.sh here
+# This prevents circular dependency
 
 # Base script initialization
 init_script() {
