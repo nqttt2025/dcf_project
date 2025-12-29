@@ -5,6 +5,24 @@ version: '3.8'
 # This mounts source code as volumes for hot reload
 
 services:
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: dcf-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
   # API Gateway - Routes requests to microservices
   gateway:
     build:
@@ -19,12 +37,16 @@ services:
     environment:
       - DCF_SERVICE_URL=http://dcf:8001
       - STOCK_SERVICE_URL=http://stock:8002
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - APP_VERSION=dev
     volumes:
       # Mount source code for hot reload
       - ./services/gateway:/app
       - ./src:/app/src:ro
     depends_on:
+      - redis
       - dcf
       - stock
     networks:
@@ -51,6 +73,9 @@ services:
       - "8001:8001"
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - APP_VERSION=dev
     volumes:
       - ./data:/app/data
@@ -59,6 +84,8 @@ services:
       # Mount source code for hot reload
       - ./services/dcf:/app
       - ./src:/app/src
+    depends_on:
+      - redis
     networks:
       - dcf-network
     restart: unless-stopped
@@ -83,6 +110,9 @@ services:
       - "8002:8002"
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - APP_VERSION=dev
     volumes:
       - ./data:/app/data
@@ -91,6 +121,8 @@ services:
       # Mount source code for hot reload
       - ./services/stock:/app
       - ./src:/app/src
+    depends_on:
+      - redis
     networks:
       - dcf-network
     restart: unless-stopped
@@ -130,5 +162,7 @@ networks:
 
 volumes:
   dcf-data:
+    driver: local
+  redis-data:
     driver: local
 

@@ -1,159 +1,132 @@
-# DCF Valuation Project
+# DCF Project Documentation
 
-## Cấu trúc dự án
+**Last Updated:** 2025-12-29  
+**Version:** 2.0
 
-### File Config
-- **DCF.cfg** - File cấu hình chính
-  - `[dcf]` - Các tham số DCF (yr, dr, pr)
-  - `[graham]` - Các hệ số Graham (base_pe, growth_multiplier)
-  - `[ticker]` - Mã cổ phiếu cần phân tích
-  - `[data_source]` - Nguồn dữ liệu (VCI)
+Chào mừng đến với documentation của DCF Valuation Project! Documentation được tổ chức theo các chủ đề để dễ tìm kiếm và sử dụng.
 
-### Classes
+## 📚 Cấu Trúc Documentation
 
-#### ConfigManager (config_manager.py)
-- Singleton class đọc config từ file
-- Cung cấp các parameters cho ứng dụng
-- Fallback values nếu config không tồn tại
+### 🚀 [Getting Started](getting-started/)
+**Dành cho người mới bắt đầu**
+- Quick Start Guide
+- Installation Guide
+- First Steps
 
-**Các phương thức chính:**
-- `get_dcf_params()` - Lấy yr, dr, pr
-- `get_graham_params()` - Lấy base_pe, growth_multiplier
-- `get_ticker()` - Lấy mã cổ phiếu
-- `log_config()` - Log hiện tại config
+### 💼 [Business](business/)
+**Business của dự án**
+- Project Overview
+- Goals & Objectives
+- Vision (Short-term & Long-term)
+- Current Features
+- Value Proposition
 
-#### CacheManager (cache_manager.py)
-- Singleton cache manager với lazy save
-- Lưu data với GMT/UTC timestamp
+### 🏗️ [Architecture](architecture/)
+**Cấu trúc và kiến trúc dự án**
+- Project Structure
+- Microservices Architecture
+- Docker Architecture
+- System Design
 
-#### LoggerSingleton (logger.py)
-- Singleton logger với file rotation
-- Format: `YYYY-MM-DD HH:MM:SS - module - function (Line: X) - LEVEL - message`
+### 🔧 [Operations](operations/)
+**Quản lý và vận hành**
+- Version Management
+- Docker Management
+- Build Optimization
+- Deployment
 
-### Các Script
+### 📖 [Reference](reference/)
+**Tài liệu tham khảo**
+- DCF Calculation
+- Graham Valuation
+- API Reference
+- Technical Details
 
-#### value_estimator.py
-- Version tuần tự (sequential)
-- Lấy dữ liệu từng cái một
-- Thích hợp cho debugging
+### 📜 [Historical](historical/)
+**Tài liệu lịch sử**
+- Old implementation notes
+- Historical fixes and changes
+- Legacy documentation
 
-**Chạy:**
-```bash
-python3 value_estimator.py
-```
+## 🎯 Quick Navigation
 
-#### value_estimator_async.py
-- **Version bất đồng bộ (async)** - RECOMMENDED
-- Lấy dữ liệu song song để tăng hiệu suất
-- ~60% nhanh hơn version tuần tự
+### Cho Người Mới
+1. **[Getting Started](getting-started/README.md)** - Bắt đầu từ đây
+2. **[Business Overview](business/overview.md)** - Hiểu về dự án
+3. **[Quick Start Guide](getting-started/quick-start.md)** - Chạy dự án
 
-**Chạy:**
-```bash
-python3 value_estimator_async.py
-```
+### Cho Developers
+1. **[Architecture](architecture/README.md)** - Hiểu cấu trúc
+2. **[Development Guide](architecture/development.md)** - Phát triển
+3. **[Reference](reference/README.md)** - Tham khảo kỹ thuật
 
-### Dữ liệu từ vnstock
-Tất cả dữ liệu được lấy từ vnstock (không scraping):
-- **Free Cash Flow** - từ balance sheet
-- **Shares Outstanding** - từ charter capital ÷ 10,000
-- **EPS** - tính từ net profit ÷ shares
-- **Price** - từ price board (real-time)
-- **Market Cap** - từ ratio summary (EV)
-- **Growth Estimate** - weighted average của:
-  - Net Profit Growth YoY (50%)
-  - Revenue Growth YoY (30%)
-  - Historical Average (20%)
+### Cho DevOps
+1. **[Operations](operations/README.md)** - Vận hành
+2. **[Version Management](operations/version-management.md)** - Quản lý version
+3. **[Docker Guide](operations/docker.md)** - Docker
 
-### Cache System
-- Singleton CacheManager
-- Lazy save (chỉ lưu 1 lần khi chạy xong)
-- GMT/UTC timestamps
-- JSON format
+## 📋 Main Documents
 
-**Cache file:** `data/fcf_cache.json`
+### ⭐ Must Read
+- **[Getting Started](getting-started/README.md)** - Bắt đầu với dự án
+- **[Business Overview](business/overview.md)** - Hiểu về business
+- **[Project Structure](architecture/project-structure.md)** - Cấu trúc dự án
 
-### DCF Parameters Giải thích
+### 📚 Important
+- **[Architecture](architecture/README.md)** - Kiến trúc hệ thống
+- **[Version Management](operations/version-management.md)** - Quản lý version
+- **[Features](business/features.md)** - Tính năng hiện có
 
-| Tham số | Mặc định | Ý nghĩa |
-|---------|----------|--------|
-| `yr` | 5 | Số năm dự báo |
-| `dr` | 10 | Discount Rate (%) |
-| `pr` | 2.5 | Perpetual/Terminal Growth Rate (%) |
-| `base_pe` | 8.5 | Base PE từ Graham |
-| `growth_multiplier` | 2 | Growth multiplier từ Graham |
+## 🔍 Search Documentation
 
-### Hiệu suất
+### Tìm theo Chủ Đề
 
-**Benchmark lần chạy gần nhất:**
-- Sequential: 16.59 giây
-- Async: 6.36 giây
-- **Cải thiện: 60.7% nhanh hơn** ⚡
+**Business & Goals**
+- [Business Overview](business/overview.md)
+- [Goals & Objectives](business/goals.md)
+- [Vision](business/vision.md)
+- [Features](business/features.md)
 
-### Logging
-Tất cả output được log với thông tin chi tiết:
-- Timestamp (GMT/UTC)
-- Module name
-- Function name & line number
-- Log level (INFO, WARNING, ERROR)
-- Message
+**Architecture & Structure**
+- [Project Structure](architecture/project-structure.md)
+- [Microservices](architecture/microservices.md)
+- [Docker](architecture/docker.md)
 
-**Log file:** `log/dcf_project.log`
+**Getting Started**
+- [Quick Start](getting-started/quick-start.md)
+- [Installation](getting-started/installation.md)
 
-## Cách sử dụng
+**Operations**
+- [Version Management](operations/version-management.md)
+- [Docker Management](operations/docker.md)
+- [Build Optimization](operations/build-optimization.md)
 
-### 1. Chạy phân tích DCF
-```bash
-# Async (nhanh hơn, recommended)
-python3 value_estimator_async.py
+**Reference**
+- [DCF Calculation](reference/dcf-calculation.md)
+- [Graham Valuation](reference/graham-valuation.md)
+- [API Reference](reference/api.md)
 
-# Sequential (chậm hơn, dùng để debug)
-python3 value_estimator.py
-```
+## 📝 Document Status
 
-### 2. Tùy chỉnh config
-Edit `DCF.cfg`:
-```ini
-[dcf]
-yr = 7              # Dự báo 7 năm
-dr = 12             # Discount rate 12%
-pr = 3              # Perpetual growth 3%
+- ✅ **Current**: Document được cập nhật và phản ánh đúng trạng thái hiện tại
+- ⭐ **Important**: Document quan trọng, nên đọc
+- 📜 **Historical**: Document lịch sử, chỉ để tham khảo
 
-[ticker]
-ticker = VNM        # Phân tích Vinamilk
-```
+## 🤝 Contributing
 
-### 3. Check config
-```bash
-python3 config_manager.py
-```
+Khi thêm documentation mới:
+1. Đặt file vào đúng folder theo chủ đề
+2. Cập nhật README.md trong folder đó
+3. Cập nhật index này nếu cần
 
-### 4. View logs
-```bash
-tail -f log/dcf_project.log
-```
+## 📞 Support
 
-## Công thức
+Nếu có câu hỏi về documentation:
+1. Kiểm tra [Getting Started](getting-started/README.md)
+2. Xem [FAQ](getting-started/faq.md) (nếu có)
+3. Kiểm tra [Reference](reference/README.md) cho technical details
 
-### DCF Model
-```
-Fair Value = Σ(CF_t / (1 + DR)^t) + Terminal Value
-Terminal Value = CF_n × (1 + PR) / (DR - PR)
-```
+---
 
-### Graham Valuation
-```
-Fair Value = EPS × (8.5 + 2 × Growth Rate)
-```
-
-## Các tệp trong project
-- `fcfs.py` - Hàm lấy financial data
-- `ge.py` - Growth estimate
-- `company.py` - Company-specific logic
-- `value_estimator.py` - DCF sequential
-- `value_estimator_async.py` - DCF async (RECOMMENDED)
-- `cache_manager.py` - Cache singleton
-- `config_manager.py` - Config singleton
-- `logger.py` - Logger singleton
-- `DCF.cfg` - Configuration file
-- `log/dcf_project.log` - Log file
-- `data/fcf_cache.json` - Cache data
+**Last Updated:** 2025-12-29  
+**Maintainer:** Project Team

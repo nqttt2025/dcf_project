@@ -21,10 +21,13 @@ DCF Analysis Project được tổ chức theo kiến trúc microservices, tươ
        ├──────────────┬──────────────┐
        ▼              ▼              ▼
 ┌──────────┐    ┌──────────┐    ┌──────────┐
-│   DCF    │    │  Stock   │    │  Common  │
-│ Service  │    │ Service  │    │  (Base)  │
-│ :8001    │    │ :8002    │    │          │
-└──────────┘    └──────────┘    └──────────┘
+│   DCF    │    │  Stock   │    │  Redis   │
+│ Service  │    │ Service  │    │  Cache   │
+│ :8001    │    │ :8002    │    │ :6379    │
+└──────┬───┘    └────┬─────┘    └──────────┘
+       │             │
+       └─────────────┘
+       (Read/Write Status)
 ```
 
 ## Services
@@ -69,14 +72,29 @@ DCF Analysis Project được tổ chức theo kiến trúc microservices, tươ
 - **Role**: Serve static files (HTML, CSS, JS)
 - **Technology**: Nginx
 - **Port**: 8080 (mapped to 80)
-- **Features**: Reverse proxy to Gateway
+- **Features**: 
+  - Reverse proxy to Gateway
+  - Real-time progress bars
+  - Stock list display
 
-### 5. Common (`services/common/`)
+### 5. Redis Service
+- **Role**: Real-time status tracking và caching
+- **Technology**: Redis 7-alpine
+- **Port**: 6379
+- **Features**:
+  - Analysis status tracking
+  - Progress updates caching
+  - TTL-based expiration
+- **Usage**: DCF và Stock services read/write status
+
+### 6. Common (`services/common/`)
 - **Role**: Shared Dockerfile và requirements.txt
 - **Purpose**: Base image cho các Python services
+- **Dependencies**: Python 3.11 + common packages (FastAPI, pandas, redis, etc.)
 
 ## Communication Flow
 
+### Standard Request Flow
 1. **Client Request** → Frontend (Nginx)
 2. **Frontend** → Gateway (proxy `/api/*`)
 3. **Gateway** → Appropriate Service (DCF or Stock)
@@ -85,6 +103,19 @@ DCF Analysis Project được tổ chức theo kiến trúc microservices, tươ
 6. **Gateway** → Return to Frontend
 7. **Frontend** → Return to Client
 
+### DCF Analysis Flow (with Redis)
+1. **User** clicks "Chạy DCF" → Frontend
+2. **Frontend** → Gateway `/api/stocks/{ticker}/run`
+3. **Gateway** → DCF Service `/analyze/{ticker}`
+4. **DCF Service**:
+   - Sets status in Redis (`analysis:{ticker}`)
+   - Updates Redis at progress milestones (5%, 15%, 50%, 70%, 85%, 95%, 100%)
+   - Saves results to file
+   - Deletes Redis status on completion
+5. **Frontend** polls Stock Service `/api/stocks/{ticker}/status`
+6. **Stock Service** reads from Redis and returns status
+7. **Frontend** displays progress bar
+
 ## Service Discovery
 
 Services communicate qua Docker network sử dụng service names:
@@ -92,18 +123,26 @@ Services communicate qua Docker network sử dụng service names:
 - `dcf` → `http://dcf:8001`
 - `stock` → `http://stock:8002`
 - `frontend` → `http://frontend:80`
+- `redis` → `redis:6379` (Redis connection)
 
 ## Docker Compose
 
 ```yaml
 services:
+  redis:      # Redis Cache Service
   gateway:    # API Gateway
   dcf:        # DCF Analysis Service
   stock:      # Stock Data Service
   frontend:   # Frontend (Nginx)
+  base:       # Base Image (build-only)
 ```
 
 All services trong cùng network: `dcf-network`
+
+### Dependencies
+- `gateway` depends_on: `redis`, `dcf`, `stock`
+- `dcf` depends_on: `redis`
+- `stock` depends_on: `redis`
 
 ## Volumes
 
@@ -119,6 +158,7 @@ Mỗi service có health check endpoint:
 - DCF: `/health`
 - Stock: `/health`
 - Frontend: `/health` (nginx)
+- Redis: `redis-cli ping` (Docker healthcheck)
 
 ## Benefits
 
@@ -149,16 +189,23 @@ uvicorn main:app --host 0.0.0.0 --port 8002
 ### Docker Development
 
 ```bash
+# Build base image first
+make docker-build-base
+
 # Build all services
 make docker-build
 
 # Start all services
 make docker-up
 
+# Development mode (hot reload)
+make docker-dev
+
 # View logs
 make docker-logs-gateway
 make docker-logs-dcf
 make docker-logs-stock
+make docker-logs-redis
 ```
 
 ## Scaling
@@ -187,8 +234,35 @@ Gateway tự động generate API docs:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+## Redis Integration
+
+### Status Tracking
+- **Key Format**: `analysis:{TICKER}` (e.g., `analysis:FPT`)
+- **Data Structure**: JSON với fields:
+  - `ticker`: Stock ticker
+  - `status`: `running`, `completed`, `failed`
+  - `progress`: Progress message
+  - `progress_percent`: 0-100
+  - `started_at`: ISO timestamp
+- **TTL**: 3600 seconds (1 hour)
+
+### Progress Milestones
+- 5%: Initializing calculation...
+- 15%: Fetching financial data...
+- 50%: Calculating DCF valuation...
+- 70%: Calculating Graham valuation...
+- 85%: Generating advanced analysis...
+- 95%: Saving results...
+- 100%: Analysis completed!
+
+### Fallback Mode
+Nếu Redis không available, services sẽ chạy ở fallback mode:
+- Status tracking không hoạt động
+- Services vẫn hoạt động bình thường
+- Logs sẽ ghi warning về Redis connection
+
 ---
 
-**Version:** 2.0 (Microservices Architecture)  
-**Last Updated:** 2025-12-28
+**Version:** 2.0 (Microservices Architecture với Redis)  
+**Last Updated:** 2025-12-29
 
