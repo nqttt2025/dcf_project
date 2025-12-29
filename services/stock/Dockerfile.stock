@@ -10,6 +10,9 @@ ENV APP_VERSION=${VERSION}
 
 WORKDIR /app
 
+# Copy common services utilities (required for imports)
+COPY services/common /app/services/common
+
 # Copy project source code
 COPY src /app/src
 COPY config /app/config

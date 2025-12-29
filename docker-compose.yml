@@ -19,7 +19,7 @@ services:
       - POSTGRES_PASSWORD=dcf_password
       - POSTGRES_DB=dcf_db
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Changed host port to 5433 to avoid conflict with host PostgreSQL
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docs/architecture/database/database-migration.sql:/docker-entrypoint-initdb.d/01-migration.sql

@@ -10,6 +10,9 @@ ENV APP_VERSION=${VERSION}
 
 WORKDIR /app
 
+# Copy common services utilities (required for imports)
+COPY services/common /app/services/common
+
 # Copy service code only (gateway doesn't need src/config/data)
 COPY services/gateway/main.py /app/main.py
 

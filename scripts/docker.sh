@@ -260,7 +260,7 @@ cmd_up() {
     echo "  - DCF Service: http://localhost:8001"
     echo "  - Stock Service: http://localhost:8002"
     echo "  - Database Service: http://localhost:8003"
-    echo "  - PostgreSQL: localhost:5432"
+    echo "  - PostgreSQL: localhost:5433 (host port, container uses 5432)"
     echo ""
     echo "View logs: make docker-logs"
     echo "Stop: make docker-down"
