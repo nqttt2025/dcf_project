@@ -19,30 +19,41 @@ test: ut
 	@echo "Note: Run 'make ft' for function tests, 'make st' for system tests, 'make complete' for integration tests"
 
 ut:
-	@./scripts/test.sh ut
+	@./scripts/dev/test.sh ut
 
 ft:
-	@./scripts/test.sh ft
+	@./scripts/dev/test.sh ft
 
 st:
-	@./scripts/test.sh st
+	@./scripts/dev/test.sh st
 
 complete:
-	@./scripts/test.sh complete
+	@./scripts/dev/test.sh complete
 
 all: ut ft st complete
 
 test-config:
-	@./scripts/test.sh config
+	@./scripts/dev/test.sh config
 
 test-cache:
-	@./scripts/test.sh cache
+	@./scripts/dev/test.sh cache
 
 test-result:
-	@./scripts/test.sh result
+	@./scripts/dev/test.sh result
 
 test-dcf:
-	@./scripts/test.sh dcf
+	@./scripts/dev/test.sh dcf
+
+test-scripts:
+	@echo "Testing all scripts..."
+	@./tests/scripts/test_bash_scripts.sh
+	@python3 tests/scripts/test_python_scripts.py
+
+test-scripts-bash:
+	@./tests/scripts/test_bash_scripts.sh
+
+test-scripts-python:
+	@python3 tests/scripts/test_python_scripts.py
 
 # ============================================================================
 # DCF Analysis Commands
@@ -55,16 +66,16 @@ dcf:
 		./scripts/dcf.sh help; \
 		exit 1; \
 	fi
-	@./scripts/dcf.sh single $(TICKER)
+	@./scripts/analysis/dcf.sh single $(TICKER)
 
 dcf-all:
-	@./scripts/dcf.sh all
+	@./scripts/analysis/dcf.sh all
 
 dcf-all-fast:
-	@./scripts/dcf.sh all-fast
+	@./scripts/analysis/dcf.sh all-fast
 
 dcf-help:
-	@./scripts/dcf.sh help
+	@./scripts/analysis/dcf.sh help
 
 # ============================================================================
 # PE Calculation Commands
@@ -76,13 +87,13 @@ pe:
 		./scripts/pe.sh help; \
 		exit 1; \
 	fi
-	@./scripts/pe.sh single $(TICKER) $(INDUSTRY)
+	@./scripts/analysis/pe.sh single $(TICKER) $(INDUSTRY)
 
 pe-all:
-	@./scripts/pe.sh all
+	@./scripts/analysis/pe.sh all
 
 pe-help:
-	@./scripts/pe.sh help
+	@./scripts/analysis/pe.sh help
 
 # ============================================================================
 # Linting Commands
@@ -92,10 +103,10 @@ lint: pylint flake8
 	@echo "Linting completed"
 
 pylint:
-	@./scripts/lint.sh pylint
+	@./scripts/dev/lint.sh pylint
 
 flake8:
-	@./scripts/lint.sh flake8
+	@./scripts/dev/lint.sh flake8
 
 # ============================================================================
 # Cleanup Commands
@@ -105,19 +116,19 @@ clean: clean-reports clean-cache clean-logs
 	@echo "Cleanup completed"
 
 clean-reports:
-	@./scripts/clean.sh reports
+	@./scripts/dev/clean.sh reports
 
 clean-cache:
-	@./scripts/clean.sh cache
+	@./scripts/dev/clean.sh cache
 
 clean-logs:
-	@./scripts/clean.sh logs
+	@./scripts/dev/clean.sh logs
 
 clean-results:
-	@./scripts/clean.sh results
+	@./scripts/dev/clean.sh results
 
 clean-data:
-	@./scripts/clean.sh data
+	@./scripts/dev/clean.sh data
 
 clean-all: clean clean-results clean-data
 	@echo "Full cleanup completed"
@@ -127,10 +138,10 @@ clean-all: clean clean-results clean-data
 # ============================================================================
 
 web:
-	@./scripts/web.sh start
+	@./scripts/utils/web.sh start
 
 web-install:
-	@./scripts/web.sh install
+	@./scripts/utils/web.sh install
 
 # ============================================================================
 # Docker Commands
@@ -143,23 +154,26 @@ docker-build-fast:
 	@PARALLEL=true ./scripts/docker.sh build
 
 docker-versions:
-	@./scripts/docker_version.sh get
+	@./scripts/version/docker_version.sh get
 
 docker-version-check-base:
-	@./scripts/docker_version.sh check-base
+	@./scripts/version/docker_version.sh check-base
+
+docker-version-update-base:
+	@./scripts/version/docker_version.sh update base
 
 docker-build-base:
-	@./scripts/build_base.sh
+	@./scripts/docker/build_base.sh
 
 docker-build-base-no-cache:
-	@./scripts/build_base.sh --no-cache
+	@./scripts/docker/build_base.sh --no-cache
 
 docker-build-auto:
 	@echo "Building with auto-tagging..."
 	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
 	if [ -z "$$CURRENT_VERSION" ] || [ -n "$$(git status --porcelain)" ]; then \
 		echo "No tag or uncommitted changes detected. Auto-creating tag..."; \
-		NEW_VERSION=$$(./scripts/auto_version.sh patch); \
+		NEW_VERSION=$$(./scripts/version/auto_version.sh patch); \
 		echo "Created tag: $$NEW_VERSION"; \
 	fi; \
 	$(MAKE) docker-build
@@ -172,7 +186,7 @@ docker-rebuild-auto:
 	@CURRENT_VERSION=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
 	if [ -z "$$CURRENT_VERSION" ] || [ -n "$$(git status --porcelain)" ]; then \
 		echo "No tag or uncommitted changes detected. Auto-creating tag..."; \
-		NEW_VERSION=$$(./scripts/auto_version.sh patch); \
+		NEW_VERSION=$$(./scripts/version/auto_version.sh patch); \
 		echo "Created tag: $$NEW_VERSION"; \
 	fi; \
 	$(MAKE) docker-rebuild
@@ -226,7 +240,7 @@ docker-db-status:
 	@./scripts/docker.sh db-status
 
 health-check:
-	@./scripts/health_check.sh
+	@./scripts/dev/health_check.sh
 
 docker-restart:
 	@./scripts/docker.sh restart
@@ -284,7 +298,7 @@ backend-dev:
 	@echo "⚠️  This runs services directly on host (no Docker)"
 	@echo "⚠️  Make sure you have dependencies installed: pip install -r services/common/requirements.txt"
 	@echo ""
-	@./scripts/run_backend_dev.sh
+	@./scripts/dev/run_backend_dev.sh
 
 backend-gateway:
 	@echo "Starting Gateway service locally..."
@@ -309,7 +323,7 @@ backend-stock:
 # ============================================================================
 
 get-version:
-	@./scripts/get_version.sh
+	@./scripts/utils/get_version.sh
 
 git-tag:
 	@if [ -z "$(VERSION)" ]; then \
@@ -409,4 +423,4 @@ help:
 	@echo "Note: Most commands delegate to scripts/ for better maintainability."
 	@echo "      See scripts/*.sh for implementation details."
 
-.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
+.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit

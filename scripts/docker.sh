@@ -7,7 +7,10 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/lib/common.sh"
+
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # ============================================================================
 # Docker-specific Functions
@@ -28,13 +31,22 @@ docker_build_images() {
     # Check if base image needs rebuild
     log_to_file "$log_file" "Checking base image version..."
     local base_version
-    base_version=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
+    base_version=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+    
+    # Ensure base_version is set (required, no default to latest)
+    if [[ -z "$base_version" ]]; then
+        log_error "Cannot get base version from docker-versions.json"
+        log_error "Please ensure docker-versions.json exists and has base version set"
+        exit 1
+    fi
+    
+    log_to_file "$log_file" "Base version: $base_version"
     local base_needs_rebuild
-    base_needs_rebuild=$("$PROJECT_ROOT/scripts/docker_version.sh" check-base 2>/dev/null && echo "yes" || echo "no")
+    base_needs_rebuild=$("$PROJECT_ROOT/scripts/version/docker_version.sh" check-base 2>/dev/null && echo "yes" || echo "no")
     
     # Get project version (from git tag - single source of truth)
     local project_version
-    project_version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    project_version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     project_version="${project_version%-dirty}"  # Remove -dirty suffix
     log_to_file "$log_file" "Project version (from git tag): $project_version"
     
@@ -46,24 +58,31 @@ docker_build_images() {
         # Tag base image with version only (no latest tag)
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+            # Remove latest tag to avoid confusion
+            docker rmi "dcf-project-base:latest" 2>/dev/null | tee -a "$log_file" || true
+            log_to_file "$log_file" "Removed latest tag (using version tag only)"
         fi
         
         # Update hash after successful build
-        "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
+        "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
     else
         log_to_file "$log_file" "Base image unchanged (version: $base_version), using cached version"
         # Ensure base image is tagged correctly (version only)
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+            # Remove latest tag to avoid confusion
+            docker rmi "dcf-project-base:latest" 2>/dev/null | tee -a "$log_file" || true
         fi
     fi
     
     # Ensure base image exists before building services
-    if ! docker_image_exists "dcf-project-base" "latest"; then
+    if ! docker_image_exists "dcf-project-base" "$base_version"; then
         log_error "Base image not found! Building base image first..."
         BASE_VERSION="$base_version" docker-compose build base 2>&1 | tee -a "$log_file" || true
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+            # Remove latest tag to avoid confusion
+            docker rmi "dcf-project-base:latest" 2>/dev/null | tee -a "$log_file" || true
         fi
     fi
     
@@ -180,14 +199,27 @@ cmd_rebuild() {
     # Rebuild base image first
     log_to_file "$log_file" "Rebuilding base image..."
     local base_version
-    base_version=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
+    base_version=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+    
+    # Ensure base_version is set (required, no default to latest)
+    if [[ -z "$base_version" ]]; then
+        log_error "Cannot get base version from docker-versions.json"
+        log_error "Please ensure docker-versions.json exists and has base version set"
+        exit 1
+    fi
+    
     BASE_VERSION="$base_version" docker-compose build --no-cache base 2>&1 | tee -a "$log_file" || true
     
     # Tag base image with version only
-    docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+    if docker_image_exists "dcf-project-base" "latest"; then
+        docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
+        # Remove latest tag to avoid confusion
+        docker rmi "dcf-project-base:latest" 2>/dev/null | tee -a "$log_file" || true
+        log_to_file "$log_file" "Removed latest tag (using version tag only)"
+    fi
     
     # Update hash after rebuild
-    "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
+    "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
     
     log_to_file "$log_file" "Building new images (--no-cache) with tag: $version..."
     if VERSION="$version" docker-compose build --no-cache 2>&1 | tee -a "$log_file"; then

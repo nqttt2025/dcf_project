@@ -4,8 +4,11 @@
 
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# Source common utilities
+source "$PROJECT_ROOT/scripts/lib/common.sh"
 
 # Get current version from git tag
 CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -67,7 +70,7 @@ git tag -a "$NEW_VERSION" -m "Release version $NEW_VERSION"
 
 # Sync Docker versions with new git tag
 echo "Syncing Docker versions with git tag: $NEW_VERSION"
-"$PROJECT_ROOT/scripts/docker_version.sh" sync-git >/dev/null 2>&1 || true
+    "$PROJECT_ROOT/scripts/version/docker_version.sh" sync-git >/dev/null 2>&1 || true
 
 echo "✓ Created tag: $NEW_VERSION"
 echo "✓ Docker versions synced"

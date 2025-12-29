@@ -1,24 +1,24 @@
 {
   "base": {
-    "current": "v1.0.0",
-    "last_requirements_hash": "4aa4dbb54b0ccd58739608f55095790ee648e37cd5c1a0194ed2f16afadb7e7e",
-    "last_updated": ""
+    "current": "v1.0.2",
+    "last_requirements_hash": "eb234923d4d436097b5bae3df15d0d4855e32cccef281dce06d08e8731233dd5",
+    "last_updated": "2025-12-30 01:15:06"
   },
   "services": {
     "gateway": {
-      "current": "v1.0.0",
+      "current": "v5.0.1",
       "depends_on_base": true
     },
     "dcf": {
-      "current": "v1.0.0",
+      "current": "v5.0.1",
       "depends_on_base": true
     },
     "stock": {
-      "current": "v1.0.0",
+      "current": "v5.0.1",
       "depends_on_base": true
     },
     "frontend": {
-      "current": "v1.0.0",
+      "current": "v5.0.1",
       "depends_on_base": false
     }
   },

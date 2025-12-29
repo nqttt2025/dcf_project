@@ -8,8 +8,11 @@ import os
 import time
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add project root to path - script can be run from anywhere
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
 from src.core.dcf_calculator import calculate_dcf_from_config
 from src.utils.logger import get_logger
@@ -48,7 +51,9 @@ async def main():
     logger.info("=" * 100)
     
     # Find all config files
-    config_dir = Path('config')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    config_dir = Path(project_root) / 'config'
     config_files = sorted(config_dir.glob('*.cfg'))
     
     # Filter out test configs
@@ -61,7 +66,7 @@ async def main():
     logger.info(f"Found {len(config_files)} config file(s)")
     
     # Check which ones are already done
-    results_dir = Path('data/results')
+    results_dir = Path(project_root) / 'data' / 'results'
     completed_tickers = set()
     if results_dir.exists():
         completed_files = list(results_dir.glob('*.text'))

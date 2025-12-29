@@ -7,15 +7,18 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/lib/common.sh"
+
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # ============================================================================
 # Constants
 # ============================================================================
 
-CREATE_TAG_SCRIPT="$PROJECT_ROOT/scripts/create_git_tag.sh"
-AUTO_VERSION_SCRIPT="$PROJECT_ROOT/scripts/auto_version.sh"
-AUTO_TAG_FROM_COMMIT_SCRIPT="$PROJECT_ROOT/scripts/auto_tag_from_commit.sh"
+CREATE_TAG_SCRIPT="$PROJECT_ROOT/scripts/version/create_git_tag.sh"
+AUTO_VERSION_SCRIPT="$PROJECT_ROOT/scripts/version/auto_version.sh"
+AUTO_TAG_FROM_COMMIT_SCRIPT="$PROJECT_ROOT/scripts/version/auto_tag_from_commit.sh"
 
 # ============================================================================
 # Git Tag Functions

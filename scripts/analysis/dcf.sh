@@ -7,15 +7,19 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
+
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # ============================================================================
 # Constants
 # ============================================================================
 
 DCF_SCRIPT="$PROJECT_ROOT/run_dcf.py"
-DCF_ALL_RETRY_SCRIPT="$PROJECT_ROOT/scripts/run_all_dcf_with_retry.py"
-DCF_ALL_FAST_SCRIPT="$PROJECT_ROOT/run_all_dcf_main.py"
+DCF_ALL_RETRY_SCRIPT="$PROJECT_ROOT/scripts/analysis/run_all_dcf_with_retry.py"
+DCF_ALL_FAST_SCRIPT="$PROJECT_ROOT/scripts/analysis/run_all_dcf.py"
 
 # ============================================================================
 # DCF Analysis Functions

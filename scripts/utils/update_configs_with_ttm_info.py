@@ -35,7 +35,9 @@ def update_config_file(config_path):
 
 def main():
     """Cập nhật tất cả các file config"""
-    project_root = Path(__file__).parent.parent
+    # Get project root - script can be run from anywhere
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent.parent
     config_dir = project_root / 'config'
     
     config_files = sorted(config_dir.glob('*.cfg'))

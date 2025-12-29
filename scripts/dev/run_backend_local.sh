@@ -3,6 +3,9 @@
 # Usage: ./scripts/run_backend_local.sh [gateway|dcf|stock|all]
 
 set -e
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # Colors for output
 GREEN='\033[0;32m'

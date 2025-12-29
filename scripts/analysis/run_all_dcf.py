@@ -8,23 +8,33 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add project root to path - script can be run from anywhere
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 from src.core.dcf_calculator import calculate_dcf_from_config
 from src.utils.logger import get_logger
 
 logger = get_logger()
 
 
-def discover_config_files(config_dir='config'):
+def discover_config_files(config_dir=None):
     """
     Discover all .cfg files in config directory
     
     Args:
-        config_dir: Path to config directory
+        config_dir: Path to config directory (default: project_root/config)
     
     Returns:
         List of config file paths
     """
+    if config_dir is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(script_dir))
+        config_dir = os.path.join(project_root, 'config')
+    
     config_files = []
     db_path = Path(config_dir)
     
@@ -118,7 +128,10 @@ async def main():
     logger.info("=" * 100)
 
     # Discover config files
-    config_files = discover_config_files('config')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    config_dir = os.path.join(project_root, 'config')
+    config_files = discover_config_files(config_dir)
     
     if not config_files:
         logger.error("No config files found in config directory!")

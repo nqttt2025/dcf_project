@@ -7,7 +7,11 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
+
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # ============================================================================
 # Constants
@@ -154,7 +158,7 @@ EOF
 sync_with_git_tag() {
     # Get project version from git tag (single source of truth)
     local git_version
-    git_version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    git_version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     
     # Remove -dirty suffix if present
     git_version="${git_version%-dirty}"
@@ -170,13 +174,13 @@ sync_with_git_tag() {
     # Base image version: Only update if requirements.txt changed
     # Otherwise keep current base version (independent versioning)
     local base_version
-    base_version=$(get_docker_version "base")
+    base_version=$(get_version "base")
     
     if check_base_needs_rebuild; then
         # Requirements changed - increment base version
         log_info "Base image needs rebuild (requirements.txt changed)"
         increment_base_version >/dev/null 2>&1
-        base_version=$(get_docker_version "base")
+        base_version=$(get_version "base")
         log_info "Base image version incremented to: $base_version"
     else
         log_info "Base image unchanged, keeping version: $base_version"
@@ -194,7 +198,7 @@ sync_with_git_tag() {
 # Increment base version (only when requirements.txt changes)
 increment_base_version() {
     local current_version
-    current_version=$(get_docker_version "base")
+    current_version=$(get_version "base")
     
     if [[ -z "$current_version" ]]; then
         log_error "Cannot get current base version"
@@ -236,7 +240,7 @@ cmd_get() {
         "$PROJECT_ROOT/scripts/get_version.sh"
     else
         local version
-        version=$(get_docker_version "$service")
+        version=$(get_version "$service")
         if [[ -n "$version" ]]; then
             echo "$version"
         else
@@ -283,7 +287,7 @@ cmd_update() {
     else
         # Get project version from git tag (single source of truth)
         local git_version
-        git_version=$("$PROJECT_ROOT/scripts/get_version.sh")
+        git_version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
         git_version="${git_version%-dirty}"  # Remove -dirty suffix
         
         if [[ -n "$git_version" ]] && [[ ! "$git_version" =~ ^dev- ]]; then

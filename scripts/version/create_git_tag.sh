@@ -12,15 +12,18 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# Source common utilities
+source "$PROJECT_ROOT/scripts/lib/common.sh"
 
 # Create git tag
 git tag "$VERSION"
 
 # Sync Docker versions with git tag
-echo "Syncing Docker versions with git tag: $VERSION"
-"$PROJECT_ROOT/scripts/docker_version.sh" sync-git
+log_info "Syncing Docker versions with git tag: $VERSION"
+"$PROJECT_ROOT/scripts/version/docker_version.sh" sync-git
 
 # Push tag to remote (optional)
 echo "Tag created: $VERSION"

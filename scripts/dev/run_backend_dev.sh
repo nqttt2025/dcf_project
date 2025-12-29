@@ -3,6 +3,9 @@
 # This is faster than Docker rebuild for development
 
 set -e
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"

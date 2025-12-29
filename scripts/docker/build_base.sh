@@ -7,10 +7,20 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
 
-# Get base version
-BASE_VERSION=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
+
+# Get base version (required, no default to latest)
+BASE_VERSION=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+
+if [[ -z "$BASE_VERSION" ]]; then
+    log_error "Cannot get base version from docker-versions.json"
+    log_error "Please ensure docker-versions.json exists and has base version set"
+    exit 1
+fi
 
 # Check for --no-cache flag
 NO_CACHE_FLAG=""
@@ -36,10 +46,13 @@ if BASE_VERSION="$BASE_VERSION" docker-compose build $NO_CACHE_FLAG base; then
     if docker_image_exists "dcf-project-base" "latest"; then
         docker tag "dcf-project-base:latest" "dcf-project-base:$BASE_VERSION" || true
         log_info "Tagged as: dcf-project-base:$BASE_VERSION"
+        # Remove latest tag to avoid confusion
+        docker rmi "dcf-project-base:latest" 2>/dev/null || true
+        log_info "Removed latest tag (using version tag only)"
     fi
     
     # Update hash after successful build
-    "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
+    "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
     log_success "Updated requirements hash in docker-versions.json"
     
     log_info ""

@@ -7,7 +7,11 @@ set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/common.sh"
+
+# Initialize script
+init_script "$(basename "${BASH_SOURCE[0]}")"
 
 # ============================================================================
 # Test Execution Functions
