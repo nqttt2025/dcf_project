@@ -130,19 +130,27 @@ make docker-dev-down
 ```
 dcf_project/
 ├── src/              # Source code
-│   ├── core/        # Core business logic
-│   └── utils/       # Utility modules
-├── services/        # Microservices
-│   ├── gateway/     # API Gateway
+│   ├── core/        # Core business logic (DCF, Graham)
+│   └── utils/       # Utility modules (logger, cache, config)
+├── services/         # Microservices
+│   ├── gateway/     # API Gateway (FastAPI)
 │   ├── dcf/         # DCF Service
 │   ├── stock/       # Stock Service
-│   └── frontend/    # Frontend (Nginx)
-├── scripts/         # Management scripts
-├── config/          # Configuration files
+│   ├── database/    # Database Service
+│   └── common/      # Common utilities for services
+├── scripts/         # Management scripts (refactored with SOLID)
+│   ├── lib/         # Core library modules
+│   ├── version/     # Version management
+│   ├── docker/      # Docker scripts
+│   ├── analysis/    # DCF & PE analysis scripts
+│   ├── dev/         # Development tools
+│   └── utils/       # Utility scripts
+├── config/          # Stock configuration files (.cfg)
+├── tests/           # Test suite (ut, ft, st, scripts)
 └── docs/            # Documentation
 ```
 
-Xem chi tiết: [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+Xem chi tiết: [docs/architecture/project-structure.md](docs/architecture/project-structure.md)
 
 ### Running Tests
 
@@ -152,6 +160,15 @@ make test
 
 # Unit tests only
 make ut
+
+# Function tests
+make ft
+
+# System tests
+make st
+
+# Script tests
+make test-scripts
 
 # Linting
 make lint
@@ -172,11 +189,14 @@ make docker-rebuild
 
 ## 📚 Documentation
 
-- **[Project Structure](docs/PROJECT_STRUCTURE.md)**: Chi tiết cấu trúc dự án
-- **[Microservices Architecture](docs/MICROSERVICES_ARCHITECTURE.md)**: Kiến trúc microservices
-- **[Docker Version Management](docs/DOCKER_VERSION_MANAGEMENT.md)**: Quản lý version Docker images
-- **[Docker Build Optimization](docs/DOCKER_BUILD_OPTIMIZATION.md)**: Tối ưu build Docker
-- **[Development Mode](docs/DEVELOPMENT_MODE.md)**: Hướng dẫn development
+Xem [docs/README.md](docs/README.md) để có overview đầy đủ về documentation.
+
+### Quick Links
+- **[Getting Started](docs/getting-started/README.md)**: Hướng dẫn bắt đầu
+- **[Architecture](docs/architecture/README.md)**: Kiến trúc hệ thống
+- **[Operations](docs/operations/README.md)**: Quản lý và vận hành
+- **[Scripts](scripts/README.md)**: Hướng dẫn scripts (SOLID refactored)
+- **[Tests](tests/README.md)**: Test suite documentation
 
 ## 🔧 Configuration
 
@@ -315,6 +335,13 @@ THE SOFTWARE.
 
 ---
 
-**Last Updated**: 2025-12-29  
-**Version**: 2.0
+**Last Updated**: 2025-12-30  
+**Version**: 2.1
+
+### Recent Updates
+- ✅ Refactored scripts directory following SOLID principles
+- ✅ Organized Python scripts into appropriate directories
+- ✅ Added comprehensive test suite for scripts
+- ✅ Improved path resolution for all scripts
+- ✅ Consolidated documentation (removed redundant README files)
 
