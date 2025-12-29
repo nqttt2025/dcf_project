@@ -28,14 +28,23 @@ class TestStockContainer(unittest.TestCase):
         """Set up test fixtures"""
         cls.container_manager = get_container_manager()
         if not cls.container_manager.is_available():
+            logger.error("Docker not available - skipping all tests")
             raise unittest.SkipTest("Docker not available")
         
         # Build containers before testing to ensure latest code
         logger.info("Building stock container with latest code...")
         builder = get_container_builder(project_root)
         build_success = builder.build_containers(services=['stock'])
+        
+        # Fail if build fails - we need latest code to test
         if not build_success:
-            logger.warning("Container build failed, but continuing with existing images")
+            logger.error("Container build failed - cannot test with latest code")
+            raise unittest.SkipTest(
+                "Container build failed - cannot test with latest code. "
+                "Please check build logs and fix errors."
+            )
+        
+        logger.info("Container build successful - proceeding with tests")
         
         # Note: Containers need to be started separately with 'make docker-up' or 'docker-compose up'
     
@@ -46,7 +55,11 @@ class TestStockContainer(unittest.TestCase):
         
         container = self.container_manager.get_container(self.CONTAINER_NAME)
         if not container:
-            self.skipTest(f"Container {self.CONTAINER_NAME} not found (may not be built)")
+            logger.error(f"Container {self.CONTAINER_NAME} not found")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} not found. "
+                "Container may not be running. Start with: make docker-up"
+            )
         
         logger.info(f"Container found: {container.name}")
     
@@ -57,11 +70,14 @@ class TestStockContainer(unittest.TestCase):
         
         is_running = self.container_manager.is_container_running(self.CONTAINER_NAME)
         if not is_running:
-            self.skipTest(f"Container {self.CONTAINER_NAME} is not running")
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
         
         status = self.container_manager.get_container_status(self.CONTAINER_NAME)
         self.assertEqual(status, 'running', f"Container should be running, got: {status}")
-        
         logger.info(f"Container status: {status}")
     
     @border
@@ -69,9 +85,21 @@ class TestStockContainer(unittest.TestCase):
         """Test Stock service health endpoint"""
         logger.info("Testing Stock service health endpoint")
         
+        # First verify container is running
+        if not self.container_manager.is_container_running(self.CONTAINER_NAME):
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
+        
         is_available = self.container_manager.check_service_health(self.SERVICE_URL)
         if not is_available:
-            self.skipTest("Stock service not available")
+            logger.error(f"Stock service at {self.SERVICE_URL} is not available")
+            self.fail(
+                f"Stock service at {self.SERVICE_URL} is not available. "
+                "Check if service is running and health endpoint is working."
+            )
         
         service_info = self.container_manager.get_service_info(self.SERVICE_URL)
         self.assertIsNotNone(service_info, "Should get service info")

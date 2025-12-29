@@ -49,6 +49,21 @@ class ContainerBuilder:
         # Remove -dirty suffix if present
         version = version.replace("-dirty", "")
         
+        # Get base version from docker-versions.json
+        import json
+        versions_file = os.path.join(self.project_root, "docker-versions.json")
+        base_version = "latest"
+        
+        if os.path.exists(versions_file):
+            try:
+                with open(versions_file, 'r') as f:
+                    versions = json.load(f)
+                    base_version = versions.get('base', {}).get('current', 'latest')
+            except Exception as e:
+                logger.warning(f"Could not read docker-versions.json: {e}")
+        
+        logger.info(f"Using VERSION={version}, BASE_VERSION={base_version}")
+        
         # Build command
         cmd = ["docker-compose", "build"]
         
@@ -58,9 +73,10 @@ class ContainerBuilder:
         if services:
             cmd.extend(services)
         
-        # Set version environment variable
+        # Set version environment variables
         env = os.environ.copy()
         env["VERSION"] = version
+        env["BASE_VERSION"] = base_version
         
         try:
             result = subprocess.run(

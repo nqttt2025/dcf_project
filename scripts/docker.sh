@@ -147,7 +147,7 @@ docker_cleanup_after_build() {
 cmd_build() {
     # Get project version from git tag (single source of truth)
     local version
-    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
     local parallel="${PARALLEL:-false}"
     local log_file="$DOCKER_LOG_DIR/docker-build-$(date +%Y%m%d-%H%M%S).log"
@@ -175,7 +175,7 @@ cmd_build() {
 cmd_rebuild() {
     # Get project version from git tag (single source of truth)
     local version
-    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
     local log_file="$DOCKER_LOG_DIR/docker-rebuild-$(date +%Y%m%d-%H%M%S).log"
     
@@ -235,7 +235,7 @@ cmd_up() {
     log_info "Starting Docker microservices..."
     # Get project version from git tag (single source of truth)
     local version
-    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
     echo "Using version: $version"
     VERSION="$version" docker-compose up -d
@@ -257,7 +257,7 @@ cmd_down() {
     log_info "Stopping Docker containers..."
     # Get project version from git tag (single source of truth)
     local version
-    version=$("$PROJECT_ROOT/scripts/get_version.sh")
+    version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
     VERSION="$version" docker-compose down
 }
@@ -444,7 +444,7 @@ main() {
             log_info "Restarting Docker containers..."
             # Get project version from git tag (single source of truth)
             local version
-            version=$("$PROJECT_ROOT/scripts/get_version.sh")
+            version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
             version="${version%-dirty}"  # Remove -dirty suffix
             VERSION="$version" docker-compose restart
             ;;

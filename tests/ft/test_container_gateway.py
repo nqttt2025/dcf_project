@@ -35,8 +35,15 @@ class TestGatewayContainer(unittest.TestCase):
         logger.info("Building gateway container with latest code...")
         builder = get_container_builder(project_root)
         build_success = builder.build_containers(services=['gateway'])
+        
+        # Fail if build fails - we need latest code to test
         if not build_success:
-            logger.warning("Container build failed, but continuing with existing images")
+            raise unittest.SkipTest(
+                "Container build failed - cannot test with latest code. "
+                "Please check build logs and fix errors."
+            )
+        
+        logger.info("Container build successful - proceeding with tests")
         
         # Note: Containers need to be started separately with 'make docker-up' or 'docker-compose up'
     
@@ -57,7 +64,10 @@ class TestGatewayContainer(unittest.TestCase):
         
         is_running = self.container_manager.is_container_running(self.CONTAINER_NAME)
         if not is_running:
-            self.skipTest(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
         
         status = self.container_manager.get_container_status(self.CONTAINER_NAME)
         self.assertEqual(status, 'running', f"Container should be running, got: {status}")

@@ -29,14 +29,23 @@ class TestDatabaseContainer(unittest.TestCase):
         """Set up test fixtures"""
         cls.container_manager = get_container_manager()
         if not cls.container_manager.is_available():
+            logger.error("Docker not available - skipping all tests")
             raise unittest.SkipTest("Docker not available")
         
         # Build containers before testing to ensure latest code
         logger.info("Building database container with latest code...")
         builder = get_container_builder(project_root)
         build_success = builder.build_containers(services=['database'])
+        
+        # Fail if build fails - we need latest code to test
         if not build_success:
-            logger.warning("Container build failed, but continuing with existing images")
+            logger.error("Container build failed - cannot test with latest code")
+            raise unittest.SkipTest(
+                "Container build failed - cannot test with latest code. "
+                "Please check build logs and fix errors."
+            )
+        
+        logger.info("Container build successful - proceeding with tests")
         
         # Note: Containers need to be started separately with 'make docker-up' or 'docker-compose up'
     
@@ -46,8 +55,14 @@ class TestDatabaseContainer(unittest.TestCase):
         logger.info("Testing Database container existence")
         
         container = self.container_manager.get_container(self.CONTAINER_NAME)
-        self.assertIsNotNone(container, f"Container {self.CONTAINER_NAME} should exist")
+        if not container:
+            logger.error(f"Container {self.CONTAINER_NAME} not found")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} not found. "
+                "Container may not be running. Start with: make docker-up"
+            )
         
+        self.assertIsNotNone(container, f"Container {self.CONTAINER_NAME} should exist")
         logger.info(f"Container found: {container.name}")
     
     @border
@@ -57,11 +72,14 @@ class TestDatabaseContainer(unittest.TestCase):
         
         is_running = self.container_manager.is_container_running(self.CONTAINER_NAME)
         if not is_running:
-            self.skipTest(f"Container {self.CONTAINER_NAME} is not running")
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
         
         status = self.container_manager.get_container_status(self.CONTAINER_NAME)
         self.assertEqual(status, 'running', f"Container should be running, got: {status}")
-        
         logger.info(f"Container status: {status}")
     
     @border
@@ -71,15 +89,23 @@ class TestDatabaseContainer(unittest.TestCase):
         
         is_running = self.container_manager.is_container_running(self.POSTGRES_CONTAINER)
         if not is_running:
-            self.skipTest(f"PostgreSQL container {self.POSTGRES_CONTAINER} is not running")
+            logger.error(f"PostgreSQL container {self.POSTGRES_CONTAINER} is not running")
+            self.fail(
+                f"PostgreSQL container {self.POSTGRES_CONTAINER} is not running. "
+                "Start containers with: make docker-up"
+            )
         
         # Check PostgreSQL health
+        logger.info("Checking PostgreSQL health...")
         exit_code, output = self.container_manager.exec_command(
             self.POSTGRES_CONTAINER,
             "pg_isready -U dcf_user -d dcf_db"
         )
         
-        self.assertEqual(exit_code, 0, f"PostgreSQL should be ready, got: {output}")
+        if exit_code != 0:
+            logger.error(f"PostgreSQL health check failed: {output}")
+            self.fail(f"PostgreSQL should be ready, got exit code {exit_code}: {output}")
+        
         logger.info("PostgreSQL is ready")
     
     @border
@@ -87,9 +113,21 @@ class TestDatabaseContainer(unittest.TestCase):
         """Test Database service health endpoint"""
         logger.info("Testing Database service health endpoint")
         
+        # First verify container is running
+        if not self.container_manager.is_container_running(self.CONTAINER_NAME):
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
+        
         is_available = self.container_manager.check_service_health(self.SERVICE_URL)
         if not is_available:
-            self.skipTest("Database service not available")
+            logger.error(f"Database service at {self.SERVICE_URL} is not available")
+            self.fail(
+                f"Database service at {self.SERVICE_URL} is not available. "
+                "Check if service is running and health endpoint is working."
+            )
         
         service_info = self.container_manager.get_service_info(self.SERVICE_URL)
         self.assertIsNotNone(service_info, "Should get service info")

@@ -28,14 +28,23 @@ class TestDCFContainer(unittest.TestCase):
         """Set up test fixtures"""
         cls.container_manager = get_container_manager()
         if not cls.container_manager.is_available():
+            logger.error("Docker not available - skipping all tests")
             raise unittest.SkipTest("Docker not available")
         
         # Build containers before testing to ensure latest code
         logger.info("Building DCF container with latest code...")
         builder = get_container_builder(project_root)
         build_success = builder.build_containers(services=['dcf'])
+        
+        # Fail if build fails - we need latest code to test
         if not build_success:
-            logger.warning("Container build failed, but continuing with existing images")
+            logger.error("Container build failed - cannot test with latest code")
+            raise unittest.SkipTest(
+                "Container build failed - cannot test with latest code. "
+                "Please check build logs and fix errors."
+            )
+        
+        logger.info("Container build successful - proceeding with tests")
         
         # Note: Containers need to be started separately with 'make docker-up' or 'docker-compose up'
     
@@ -45,8 +54,14 @@ class TestDCFContainer(unittest.TestCase):
         logger.info("Testing DCF container existence")
         
         container = self.container_manager.get_container(self.CONTAINER_NAME)
-        self.assertIsNotNone(container, f"Container {self.CONTAINER_NAME} should exist")
+        if not container:
+            logger.error(f"Container {self.CONTAINER_NAME} not found")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} not found. "
+                "Container may not be running. Start with: make docker-up"
+            )
         
+        self.assertIsNotNone(container, f"Container {self.CONTAINER_NAME} should exist")
         logger.info(f"Container found: {container.name}")
     
     @border
@@ -56,11 +71,14 @@ class TestDCFContainer(unittest.TestCase):
         
         is_running = self.container_manager.is_container_running(self.CONTAINER_NAME)
         if not is_running:
-            self.skipTest(f"Container {self.CONTAINER_NAME} is not running")
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
         
         status = self.container_manager.get_container_status(self.CONTAINER_NAME)
         self.assertEqual(status, 'running', f"Container should be running, got: {status}")
-        
         logger.info(f"Container status: {status}")
     
     @border
@@ -68,9 +86,21 @@ class TestDCFContainer(unittest.TestCase):
         """Test DCF service health endpoint"""
         logger.info("Testing DCF service health endpoint")
         
+        # First verify container is running
+        if not self.container_manager.is_container_running(self.CONTAINER_NAME):
+            logger.error(f"Container {self.CONTAINER_NAME} is not running")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} is not running. "
+                "Start containers with: make docker-up"
+            )
+        
         is_available = self.container_manager.check_service_health(self.SERVICE_URL)
         if not is_available:
-            self.skipTest("DCF service not available")
+            logger.error(f"DCF service at {self.SERVICE_URL} is not available")
+            self.fail(
+                f"DCF service at {self.SERVICE_URL} is not available. "
+                "Check if service is running and health endpoint is working."
+            )
         
         service_info = self.container_manager.get_service_info(self.SERVICE_URL)
         self.assertIsNotNone(service_info, "Should get service info")
@@ -102,13 +132,18 @@ class TestDCFContainer(unittest.TestCase):
         
         container = self.container_manager.get_container(self.CONTAINER_NAME)
         if not container:
-            self.skipTest("Container not found")
+            logger.error(f"Container {self.CONTAINER_NAME} not found")
+            self.fail(
+                f"Container {self.CONTAINER_NAME} not found. "
+                "Container may not be running. Start with: make docker-up"
+            )
         
         mounts = container.attrs.get('Mounts', [])
         if len(mounts) > 0:
             # Check for data, config, logs volumes
             mount_paths = [m.get('Destination', '') for m in mounts]
             logger.info(f"Volume mounts: {mount_paths}")
+            self.assertGreater(len(mount_paths), 0, "Should have volume mounts")
         else:
             logger.info("No volume mounts found (may be using bind mounts)")
 
