@@ -211,6 +211,7 @@ services:
     container_name: dcf-frontend
     ports:
       - "8081:80"
+      - "8082:80"
     depends_on:
       - gateway
     networks:
