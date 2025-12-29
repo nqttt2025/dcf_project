@@ -47,6 +47,12 @@ docs/
 - **[README.md](architecture/README.md)** ⭐ - Tổng quan
 - **[Project Structure](architecture/project-structure.md)** ⭐ - Chi tiết cấu trúc
 - **[Microservices Architecture](architecture/microservices.md)** ⭐ - Kiến trúc microservices
+- **[Database](architecture/database/README.md)** ⭐ - Database design
+  - [Database Design](architecture/database/database-design.md) - Schema design
+  - [Database Service](architecture/database/database-service.md) - Service design
+  - [Database Review](architecture/database/database-review.md) - Review và improvements
+  - [Database Migration](architecture/database/database-migration.sql) - Migration script
+  - [Database Improvements](architecture/database/database-improvements.sql) - Improvements script
 - **[Docker Architecture](architecture/docker.md)** - Docker setup
 - **[Development Guide](architecture/development.md)** - Development workflow
 
@@ -126,6 +132,7 @@ docs/
 ### Architecture & Structure
 - [Project Structure](architecture/project-structure.md)
 - [Microservices](architecture/microservices.md)
+- [Database](architecture/database/README.md)
 - [Docker](architecture/docker.md)
 - [Development](architecture/development.md)
 

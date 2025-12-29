@@ -18,6 +18,7 @@ from .fcfs import (
     get_market_cap
 )
 from .ge import get_growth_estimate
+from .advanced_analysis import generate_advanced_analysis
 from ..utils.logger import get_logger, get_stock_logger
 from ..utils.result_manager import get_result_manager
 import configparser
@@ -337,7 +338,6 @@ class DCFCalculator:
         # Generate advanced analysis
         if progress_callback:
             progress_callback(85.0, "Generating advanced analysis...")
-        from .advanced_analysis import generate_advanced_analysis
         advanced_analysis = generate_advanced_analysis(result, dcf_result)
         result['advanced_analysis'] = advanced_analysis
 
@@ -357,8 +357,9 @@ class DCFCalculator:
         # Save result to results directory
         if progress_callback:
             progress_callback(95.0, "Saving results...")
-        result_file = self.result_manager.save_result(self.ticker, result, self.report_language)
+        result_file, log_file = self.result_manager.save_result(self.ticker, result, self.report_language)
         result['result_file'] = result_file
+        result['log_file'] = log_file
         self.logger.info(f"Result saved to {result_file}")
 
         if progress_callback:

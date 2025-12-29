@@ -10,10 +10,13 @@ Chi tiết cấu trúc thư mục và modules của dự án.
 ### 2. [Microservices Architecture](microservices.md) ⭐
 Kiến trúc microservices và cách các services giao tiếp.
 
-### 3. [Docker Architecture](docker.md)
+### 3. [Database](database/README.md) ⭐
+Database architecture và design cho VN30 stock data.
+
+### 4. [Docker Architecture](docker.md)
 Docker setup và containerization strategy.
 
-### 4. [Development Guide](development.md)
+### 5. [Development Guide](development.md)
 Hướng dẫn phát triển và development workflow.
 
 ## 🏗️ Architecture Overview
@@ -68,6 +71,7 @@ Hướng dẫn phát triển và development workflow.
 
 - [Project Structure](project-structure.md) - Chi tiết cấu trúc
 - [Microservices](microservices.md) - Kiến trúc microservices
+- [Database](database/README.md) - Database design
 - [Docker](docker.md) - Docker setup
 - [Development](development.md) - Development guide
 

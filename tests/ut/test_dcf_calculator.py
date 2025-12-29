@@ -44,6 +44,29 @@ class TestDCFCalculator(unittest.TestCase):
         
         with open(cls.test_config_file, 'w') as f:
             config.write(f)
+    
+    def _run_async(self, coro):
+        """
+        Helper method to run async code in tests.
+        Handles both cases: when there's a running event loop and when there isn't.
+        Uses loop.run_until_complete() if there's an existing loop,
+        otherwise uses asyncio.run() for better compatibility.
+        """
+        try:
+            # Try to get the running loop - if this succeeds, there IS a running loop
+            asyncio.get_running_loop()
+            # If we get here, there's a running loop - we can't use asyncio.run()
+            # Create a new event loop for this test
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+        except RuntimeError:
+            # No running loop, safe to use asyncio.run()
+            return asyncio.run(coro)
 
     @border
     def setUp(self):
@@ -213,7 +236,7 @@ class TestDCFCalculator(unittest.TestCase):
             data = await calculator.fetch_data_async()
             return data
         
-        data = asyncio.run(run_test())
+        data = self._run_async(run_test())
         
         self.assertIn('fcf', data, "Should have FCF")
         self.assertIn('ge', data, "Should have growth estimate")
@@ -249,7 +272,7 @@ class TestDCFCalculator(unittest.TestCase):
             result = await calculator.calculate()
             return result
         
-        result = asyncio.run(run_test())
+        result = self._run_async(run_test())
         
         self.assertIn('ticker', result, "Should have ticker")
         self.assertIn('dcf_fair_value', result, "Should have DCF fair value")
@@ -282,7 +305,7 @@ class TestDCFCalculator(unittest.TestCase):
             result = await calculate_dcf_from_config(self.test_config_file)
             return result
         
-        result = asyncio.run(run_test())
+        result = self._run_async(run_test())
         
         self.assertIn('ticker', result, "Should have ticker")
         self.assertIn('dcf_fair_value', result, "Should have DCF fair value")

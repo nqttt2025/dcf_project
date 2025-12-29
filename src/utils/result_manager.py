@@ -22,17 +22,22 @@ class ResultManager:
         self.results_dir = os.path.join(self.project_root, 'data', 'results')
         os.makedirs(self.results_dir, exist_ok=True)
 
-    def save_result(self, stock_name, valuation_result):
+    def save_result(self, stock_name, valuation_result, report_language='vi'):
         """
         Lưu kết quả DCF cho một mã cổ phiếu
 
         Args:
             stock_name: Mã cổ phiếu (ví dụ: FPT, VNM, BID)
             valuation_result: Dictionary chứa kết quả định giá
+            report_language: Ngôn ngữ báo cáo ('vi' hoặc 'en'), mặc định 'vi'
 
         Returns:
             Tuple của (đường dẫn JSON, đường dẫn LOG)
         """
+        # Ensure report_language is in result dict for _save_as_log
+        if 'report_language' not in valuation_result:
+            valuation_result = valuation_result.copy()
+            valuation_result['report_language'] = report_language
         stock_name_lower = stock_name.lower()
         result_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.json')
         log_file = os.path.join(self.results_dir, f'{stock_name_lower}_result.text')

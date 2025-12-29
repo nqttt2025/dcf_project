@@ -37,6 +37,11 @@ class CacheManager:
     def get(self, key):
         """Get value from cache"""
         return self.cache.get(key)
+    
+    def get_with_timestamp(self, ticker, data_type):
+        """Get value with timestamp from cache"""
+        key = f"{ticker.upper()}_{data_type}"
+        return self.cache.get(key)
 
     def set(self, key, value):
         """Set value in cache (in-memory only, not persisted immediately)"""

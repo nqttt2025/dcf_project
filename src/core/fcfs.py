@@ -154,8 +154,24 @@ def get_free_cash_flow_ttm(ticker):
             row = cash_flow_df.iloc[idx]
             
             # Lấy giá trị OCF và CapEx từ dòng hiện tại
-            ocf_val = row.get(ocf_col, 0) if ocf_col in row.index else 0
-            capex_val = row.get(capex_col, 0) if capex_col in row.index else 0
+            # Handle NaN values explicitly - row.get() returns NaN if value exists but is NaN
+            if ocf_col in row.index:
+                ocf_val = row[ocf_col]
+                if HAS_PANDAS and pd.isna(ocf_val):
+                    ocf_val = 0
+                elif not HAS_PANDAS and ocf_val is None:
+                    ocf_val = 0
+            else:
+                ocf_val = 0
+                
+            if capex_col in row.index:
+                capex_val = row[capex_col]
+                if HAS_PANDAS and pd.isna(capex_val):
+                    capex_val = 0
+                elif not HAS_PANDAS and capex_val is None:
+                    capex_val = 0
+            else:
+                capex_val = 0
             
             # Kiểm tra tính hợp lệ của dữ liệu
             # Bỏ qua các dòng không có dữ liệu hoặc là header row
@@ -355,9 +371,10 @@ def get_free_cash_flow(ticker, use_ttm=True):
         logger.error(f"Error fetching FCF from vnstock: {e}")
         # Check cache as fallback
         if cache_manager.exists(ticker, "fcf"):
-            cached_fcf = cache_manager.get(f"{ticker.upper()}_fcf")
-            logger.info(f"Using cached FCF for {ticker}: {cached_fcf:,.0f}")
-            return float(cached_fcf) if cached_fcf else None
+            cached_fcf = cache_manager.get_with_timestamp(ticker, "fcf")
+            if cached_fcf is not None:
+                logger.info(f"Using cached FCF for {ticker}: {cached_fcf:,.0f}")
+                return float(cached_fcf)
         return None
 
 def get_shares_outstanding(ticker):
