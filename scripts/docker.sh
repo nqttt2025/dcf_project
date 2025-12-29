@@ -87,11 +87,13 @@ docker_build_images() {
     fi
     
     # Build service images
+    # IMPORTANT: Set both BASE_VERSION and VERSION to ensure correct base image is used
+    log_to_file "$log_file" "Building service images with BASE_VERSION=$base_version, VERSION=$version"
     if [[ "$parallel" == "true" ]]; then
         log_to_file "$log_file" "Building images in parallel..."
-        VERSION="$version" docker-compose build --parallel 2>&1 | tee -a "$log_file"
+        BASE_VERSION="$base_version" VERSION="$version" docker-compose build --parallel 2>&1 | tee -a "$log_file"
     else
-        VERSION="$version" docker-compose build 2>&1 | tee -a "$log_file"
+        BASE_VERSION="$base_version" VERSION="$version" docker-compose build 2>&1 | tee -a "$log_file"
     fi
     return $?
 }
@@ -222,7 +224,8 @@ cmd_rebuild() {
     "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
     
     log_to_file "$log_file" "Building new images (--no-cache) with tag: $version..."
-    if VERSION="$version" docker-compose build --no-cache 2>&1 | tee -a "$log_file"; then
+    log_to_file "$log_file" "Using BASE_VERSION=$base_version, VERSION=$version"
+    if BASE_VERSION="$base_version" VERSION="$version" docker-compose build --no-cache 2>&1 | tee -a "$log_file"; then
         docker_tag_images "$version" "$log_file"
     fi
     
@@ -237,8 +240,17 @@ cmd_up() {
     local version
     version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
-    echo "Using version: $version"
-    VERSION="$version" docker-compose up -d
+    
+    # Get base version
+    local base_version
+    base_version=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+    if [[ -z "$base_version" ]]; then
+        log_error "Cannot get base version from docker-versions.json"
+        exit 1
+    fi
+    
+    echo "Using version: $version, base version: $base_version"
+    BASE_VERSION="$base_version" VERSION="$version" docker-compose up -d
     echo ""
     echo "Microservices started:"
     echo "  - Frontend: http://localhost:8080"
@@ -259,7 +271,16 @@ cmd_down() {
     local version
     version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
     version="${version%-dirty}"  # Remove -dirty suffix
-    VERSION="$version" docker-compose down
+    
+    # Get base version
+    local base_version
+    base_version=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+    if [[ -z "$base_version" ]]; then
+        log_error "Cannot get base version from docker-versions.json"
+        exit 1
+    fi
+    
+    BASE_VERSION="$base_version" VERSION="$version" docker-compose down
 }
 
 cmd_logs() {
@@ -446,7 +467,16 @@ main() {
             local version
             version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
             version="${version%-dirty}"  # Remove -dirty suffix
-            VERSION="$version" docker-compose restart
+            
+            # Get base version
+            local base_version
+            base_version=$("$PROJECT_ROOT/scripts/version/docker_version.sh" get base 2>/dev/null)
+            if [[ -z "$base_version" ]]; then
+                log_error "Cannot get base version from docker-versions.json"
+                exit 1
+            fi
+            
+            BASE_VERSION="$base_version" VERSION="$version" docker-compose restart
             ;;
         clean)
             cmd_clean
