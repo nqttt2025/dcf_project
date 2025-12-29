@@ -73,19 +73,47 @@ dcf_project/
 │       ├── Dockerfile.frontend  # Frontend Docker image (Nginx)
 │       └── nginx.conf           # Nginx configuration
 │
-├── scripts/                      # Management scripts
-│   ├── common.sh               # Shared utilities
-│   ├── docker.sh               # Docker management
-│   ├── docker_version.sh       # Docker versioning
-│   ├── build_base.sh           # Base image builder
-│   ├── health_check.sh         # Health check script
-│   ├── git.sh                   # Git tag management
-│   ├── test.sh                  # Test runner
-│   ├── lint.sh                  # Linting
-│   ├── clean.sh                 # Cleanup
-│   ├── dcf.sh                   # DCF analysis runner
-│   ├── pe.sh                    # PE calculation
-│   └── web.sh                   # Web service management
+├── scripts/                      # Management scripts (SOLID refactored)
+│   ├── lib/                     # Core library modules
+│   │   ├── common.sh           # Main entry point
+│   │   ├── config.sh           # Configuration
+│   │   ├── logging.sh          # Logging functions
+│   │   ├── file_ops.sh         # File operations
+│   │   ├── validation.sh       # Input validation
+│   │   ├── error_handler.sh    # Error handling
+│   │   ├── python_utils.sh     # Python helpers
+│   │   ├── docker_utils.sh     # Docker helpers
+│   │   ├── display.sh           # Display functions
+│   │   ├── version.sh           # Version management
+│   │   └── base_script.sh      # Base script class
+│   ├── version/                 # Version management scripts
+│   │   ├── docker_version.sh   # Docker versioning
+│   │   ├── create_git_tag.sh   # Git tag creation
+│   │   ├── auto_version.sh     # Auto versioning
+│   │   └── auto_tag_from_commit.sh # Tag from commit
+│   ├── docker/                  # Docker scripts
+│   │   └── build_base.sh        # Base image builder
+│   ├── analysis/                # Analysis scripts
+│   │   ├── dcf.sh              # DCF analysis runner
+│   │   ├── pe.sh               # PE calculation
+│   │   ├── run_all_dcf.sh     # Run all DCF script
+│   │   ├── calculate_pe.py    # PE calculation (Python)
+│   │   ├── run_all_dcf.py     # Run all DCF (Python)
+│   │   └── run_all_dcf_with_retry.py # DCF with retry
+│   ├── dev/                     # Development tools
+│   │   ├── test.sh            # Test runner
+│   │   ├── lint.sh            # Linting
+│   │   ├── clean.sh           # Cleanup
+│   │   ├── health_check.sh    # Health check
+│   │   ├── run_backend_dev.sh # Backend dev runner
+│   │   └── run_backend_local.sh # Local backend runner
+│   ├── utils/                   # Utility scripts
+│   │   ├── get_version.sh     # Version getter
+│   │   ├── web.sh             # Web service management
+│   │   └── update_configs_with_ttm_info.py # Config updater
+│   ├── common.sh               # Backward compatibility wrapper
+│   ├── docker.sh               # Main Docker management
+│   └── git.sh                  # Git tag management
 │
 ├── config/                       # Configuration files
 │   ├── *.cfg                    # Stock-specific configs (FPT, VNM, etc.)
@@ -105,8 +133,13 @@ dcf_project/
 │   ├── DOCKER_BUILD_OPTIMIZATION.md
 │   └── ... (other docs)
 │
-├── tests/                        # Test files
-│   └── test_*.py               # Unit and integration tests
+├── tests/                        # Test suite
+│   ├── ut/                     # Unit tests
+│   ├── ft/                     # Function tests
+│   ├── st/                     # System tests
+│   └── scripts/                # Script tests
+│       ├── test_bash_scripts.sh # Bash script tests
+│       └── test_python_scripts.py # Python script tests
 │
 ├── docker-compose.yml           # Production Docker Compose
 ├── docker-compose.dev.yml       # Development Docker Compose (hot reload)
@@ -275,8 +308,9 @@ dcf_project/
 
 ### Version Scripts
 - `scripts/git.sh` - Git tag management
-- `scripts/docker_version.sh` - Docker version management
-- `scripts/build_base.sh` - Base image builder
+- `scripts/version/docker_version.sh` - Docker version management
+- `scripts/docker/build_base.sh` - Base image builder
+- `scripts/utils/get_version.sh` - Version getter
 
 ## Development Workflow
 
@@ -445,5 +479,11 @@ make docker-up
 
 ---
 
-**Last Updated**: 2025-12-29  
-**Version**: 2.0
+**Last Updated**: 2025-12-30  
+**Version**: 2.1
+
+### Recent Updates
+- ✅ Scripts directory refactored following SOLID principles
+- ✅ Python scripts organized into appropriate directories
+- ✅ Comprehensive test suite added
+- ✅ Improved path resolution for all scripts

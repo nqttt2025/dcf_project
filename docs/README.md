@@ -1,7 +1,14 @@
 # DCF Project Documentation
 
-**Last Updated:** 2025-12-29  
-**Version:** 2.0
+**Last Updated:** 2025-12-30  
+**Version:** 2.1
+
+### Recent Updates (2025-12-30)
+- ✅ Scripts directory refactored following SOLID principles
+- ✅ Python scripts organized into analysis/ and utils/ directories
+- ✅ Comprehensive test suite added for scripts
+- ✅ Improved path resolution for all scripts
+- ✅ Documentation consolidated and updated
 
 Chào mừng đến với documentation của DCF Valuation Project! Documentation được tổ chức theo các chủ đề để dễ tìm kiếm và sử dụng.
 
@@ -128,5 +135,12 @@ Nếu có câu hỏi về documentation:
 
 ---
 
-**Last Updated:** 2025-12-29  
+**Last Updated:** 2025-12-30  
+**Version:** 2.1  
 **Maintainer:** Project Team
+
+### Recent Updates (2025-12-30)
+- ✅ Scripts directory refactored following SOLID principles
+- ✅ Python scripts organized into analysis/ and utils/ directories
+- ✅ Comprehensive test suite added for scripts
+- ✅ Documentation updated with new scripts structure

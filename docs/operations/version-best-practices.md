@@ -269,7 +269,7 @@ make docker-versions
 **Giải pháp:**
 ```bash
 # Sync lại với git tag
-./scripts/docker_version.sh sync-git
+./scripts/version/docker_version.sh sync-git
 
 # Hoặc tạo lại git tag
 make git-tag VERSION=v1.0.1
@@ -289,7 +289,7 @@ make docker-version-check-base
 make docker-rebuild
 
 # Hoặc manual update hash
-./scripts/docker_version.sh update base
+./scripts/version/docker_version.sh update base
 ```
 
 ### Vấn Đề 3: Project Version Không Đúng

@@ -70,13 +70,13 @@ Hệ thống tự động:
 # Xem tất cả versions
 make docker-versions
 # hoặc
-./scripts/docker_version.sh get
+./scripts/version/docker_version.sh get
 
 # Xem version của base
-./scripts/docker_version.sh get base
+./scripts/version/docker_version.sh get base
 
 # Xem version của service
-./scripts/docker_version.sh get gateway
+./scripts/version/docker_version.sh get gateway
 ```
 
 ### Check Base Image
@@ -85,7 +85,7 @@ make docker-versions
 # Check xem base image có cần rebuild không
 make docker-version-check-base
 # hoặc
-./scripts/docker_version.sh check-base
+./scripts/version/docker_version.sh check-base
 ```
 
 Output:
@@ -96,7 +96,7 @@ Output:
 
 ```bash
 # Sync tất cả versions với git tag hiện tại
-./scripts/docker_version.sh sync-git
+./scripts/version/docker_version.sh sync-git
 ```
 
 Khi tạo git tag, versions tự động sync:
@@ -109,10 +109,10 @@ make git-tag VERSION=v1.0.0
 
 ```bash
 # Set version cho base image
-./scripts/docker_version.sh set base v1.1.0
+./scripts/version/docker_version.sh set base v1.1.0
 
 # Set version cho service
-./scripts/docker_version.sh set gateway v1.0.0
+./scripts/version/docker_version.sh set gateway v1.0.0
 ```
 
 ## Workflow
@@ -245,7 +245,7 @@ Docker versions tự động sync với git tag.
 
 ```bash
 # Sync với git tag hiện tại
-./scripts/docker_version.sh sync-git
+./scripts/version/docker_version.sh sync-git
 ```
 
 ## Troubleshooting
@@ -254,7 +254,7 @@ Docker versions tự động sync với git tag.
 
 ```bash
 # Force rebuild base image
-./scripts/docker_version.sh set base v1.0.1
+./scripts/version/docker_version.sh set base v1.0.1
 make docker-rebuild
 ```
 
@@ -262,7 +262,7 @@ make docker-rebuild
 
 ```bash
 # Manual sync
-./scripts/docker_version.sh sync-git
+./scripts/version/docker_version.sh sync-git
 ```
 
 ### Check Requirements Hash
@@ -279,7 +279,7 @@ python3 -c "import json; print(json.load(open('docker-versions.json'))['base']['
 
 1. **Luôn sync versions sau khi tạo git tag**
    - Tự động khi dùng `make git-tag`
-   - Manual: `./scripts/docker_version.sh sync-git`
+   - Manual: `./scripts/version/docker_version.sh sync-git`
 
 2. **Check base image trước khi build**
    ```bash
@@ -288,7 +288,7 @@ python3 -c "import json; print(json.load(open('docker-versions.json'))['base']['
 
 3. **Increment base version khi thay đổi dependencies**
    - Tự động khi rebuild base image
-   - Manual: `./scripts/docker_version.sh update base`
+   - Manual: `./scripts/version/docker_version.sh update base`
 
 4. **Commit `docker-versions.json` vào git**
    - Track version history

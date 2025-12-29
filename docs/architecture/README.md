@@ -19,6 +19,9 @@ Docker setup và containerization strategy.
 ### 5. [Development Guide](development.md)
 Hướng dẫn phát triển và development workflow.
 
+### 6. [Scripts Architecture](scripts.md) ⭐ NEW
+Cấu trúc và tổ chức scripts directory (SOLID refactored).
+
 ## 🏗️ Architecture Overview
 
 ### System Architecture
@@ -74,6 +77,7 @@ Hướng dẫn phát triển và development workflow.
 - [Database](database/README.md) - Database design
 - [Docker](docker.md) - Docker setup
 - [Development](development.md) - Development guide
+- [Scripts Architecture](scripts.md) - Scripts organization (SOLID)
 
 ---
 

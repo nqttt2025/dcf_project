@@ -1,7 +1,12 @@
 # Documentation Index
 
-**Last Updated:** 2025-12-29  
+**Last Updated:** 2025-12-30  
 **Purpose:** Index của tất cả documentation trong dự án, giúp tìm document phù hợp.
+
+### Recent Updates (2025-12-30)
+- ✅ Scripts directory documentation updated (SOLID refactoring)
+- ✅ Project structure updated with new scripts organization
+- ✅ Version management paths updated
 
 ## 📚 Cấu Trúc Documentation
 
@@ -57,6 +62,7 @@ docs/
   - [Database Integration](architecture/database/DATABASE_INTEGRATION.md) - Integration summary
 - **[Docker Architecture](architecture/docker.md)** - Docker setup
 - **[Development Guide](architecture/development.md)** - Development workflow
+- **[Scripts Architecture](architecture/scripts.md)** ⭐ NEW - Scripts organization (SOLID)
 
 ## 🔧 Operations
 

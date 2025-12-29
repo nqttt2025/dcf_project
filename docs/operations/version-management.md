@@ -15,12 +15,12 @@ Hệ thống quản lý version thống nhất cho toàn bộ project.
 ### 1. Project Version (Git Tag) - Single Source of Truth
 
 **Source:** Git tag  
-**Script:** `scripts/get_version.sh`  
+**Script:** `scripts/utils/get_version.sh`  
 **Usage:** Tất cả Docker service images
 
 ```bash
 # Lấy project version
-./scripts/get_version.sh
+./scripts/utils/get_version.sh
 # hoặc
 make get-version
 ```
@@ -33,7 +33,7 @@ make get-version
 ### 2. Base Image Version (Independent)
 
 **Source:** `docker-versions.json`  
-**Script:** `scripts/docker_version.sh`  
+**Script:** `scripts/version/docker_version.sh`  
 **Usage:** Base Docker image
 
 - Version riêng: `v1.0.0`, `v1.0.1`, ...
@@ -43,7 +43,7 @@ make get-version
 ### 3. Service Image Versions (Sync với Git Tag)
 
 **Source:** `docker-versions.json` (sync với git tag)  
-**Script:** `scripts/docker_version.sh`  
+**Script:** `scripts/version/docker_version.sh`  
 **Usage:** Docker service images (gateway, dcf, stock, frontend)
 
 - Đồng bộ với git tag
@@ -74,61 +74,61 @@ Quản lý Docker-specific versions:
 
 ## Scripts và Chức Năng
 
-### `scripts/get_version.sh` ⭐ PRIMARY
+### `scripts/utils/get_version.sh` ⭐ PRIMARY
 **Chức năng:** Lấy project version từ git tag  
 **Usage:** Tất cả scripts cần project version
 
 ```bash
-./scripts/get_version.sh
+./scripts/utils/get_version.sh
 # Output: v1.0.0 hoặc dev-abc123 hoặc dev-20251229-001234
 ```
 
-### `scripts/docker_version.sh`
+### `scripts/version/docker_version.sh`
 **Chức năng:** Quản lý Docker-specific versions  
 **Usage:** Base image version, sync service versions
 
 ```bash
 # Get Docker versions
-./scripts/docker_version.sh get              # All Docker versions
-./scripts/docker_version.sh get base         # Base image version
-./scripts/docker_version.sh get gateway      # Gateway version
-./scripts/docker_version.sh get project      # Project version (from git tag)
+./scripts/version/docker_version.sh get              # All Docker versions
+./scripts/version/docker_version.sh get base         # Base image version
+./scripts/version/docker_version.sh get gateway      # Gateway version
+./scripts/version/docker_version.sh get project      # Project version (from git tag)
 
 # Check base image
-./scripts/docker_version.sh check-base       # Check if rebuild needed
+./scripts/version/docker_version.sh check-base       # Check if rebuild needed
 
 # Sync with git tag
-./scripts/docker_version.sh sync-git         # Sync service versions
+./scripts/version/docker_version.sh sync-git         # Sync service versions
 ```
 
-### `scripts/create_git_tag.sh`
+### `scripts/version/create_git_tag.sh`
 **Chức năng:** Tạo git tag và sync Docker versions  
 **Usage:** Tạo version mới
 
 ```bash
-./scripts/create_git_tag.sh v1.0.0
+./scripts/version/create_git_tag.sh v1.0.0
 # 1. Tạo git tag
 # 2. Sync Docker service versions với git tag
 ```
 
-### `scripts/auto_version.sh`
+### `scripts/version/auto_version.sh`
 **Chức năng:** Auto-increment version và tạo git tag  
 **Usage:** Tự động tăng version
 
 ```bash
-./scripts/auto_version.sh patch   # v1.0.0 -> v1.0.1
-./scripts/auto_version.sh minor   # v1.0.0 -> v1.1.0
-./scripts/auto_version.sh major   # v1.0.0 -> v2.0.0
+./scripts/version/auto_version.sh patch   # v1.0.0 -> v1.0.1
+./scripts/version/auto_version.sh minor   # v1.0.0 -> v1.1.0
+./scripts/version/auto_version.sh major   # v1.0.0 -> v2.0.0
 # Tự động sync Docker versions
 ```
 
-### `scripts/auto_tag_from_commit.sh`
+### `scripts/version/auto_tag_from_commit.sh`
 **Chức năng:** Tạo tag từ commit message  
 **Usage:** Auto-tagging từ commit
 
 ```bash
 # Commit message: "Fix bug [version: v1.0.1]"
-./scripts/auto_tag_from_commit.sh
+./scripts/version/auto_tag_from_commit.sh
 # Tự động tạo tag v1.0.1 và sync Docker versions
 ```
 
@@ -248,7 +248,7 @@ make docker-rebuild      # Rebuild (uses project version from git tag)
 
 ```bash
 # Sync service versions với git tag
-./scripts/docker_version.sh sync-git
+./scripts/version/docker_version.sh sync-git
 ```
 
 ### Base image không rebuild khi cần
@@ -258,7 +258,7 @@ make docker-rebuild      # Rebuild (uses project version from git tag)
 make docker-version-check-base
 
 # Force rebuild base
-./scripts/docker_version.sh update base
+./scripts/version/docker_version.sh update base
 make docker-rebuild
 ```
 
