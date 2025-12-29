@@ -43,7 +43,7 @@ docker_build_images() {
         log_to_file "$log_file" "Building base image (version: $base_version)..."
         BASE_VERSION="$base_version" docker-compose build base 2>&1 | tee -a "$log_file" || true
         
-        # Tag base image with both version and latest
+        # Tag base image with version only (no latest tag)
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
         fi
@@ -52,11 +52,9 @@ docker_build_images() {
         "$PROJECT_ROOT/scripts/docker_version.sh" update base >/dev/null 2>&1 || true
     else
         log_to_file "$log_file" "Base image unchanged (version: $base_version), using cached version"
-        # Ensure base image is tagged correctly (both version and latest)
+        # Ensure base image is tagged correctly (version only)
         if docker_image_exists "dcf-project-base" "latest"; then
             docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
-        elif docker_image_exists "dcf-project-base" "$base_version"; then
-            docker tag "dcf-project-base:$base_version" "dcf-project-base:latest" 2>&1 | tee -a "$log_file" || true
         fi
     fi
     
@@ -83,14 +81,18 @@ docker_tag_images() {
     local version="$1"
     local log_file="$2"
     
-    log_to_file "$log_file" "Tagging images with version $version and latest..."
+    log_to_file "$log_file" "Tagging images with version $version..."
+    # Only tag with version, no latest tag
+    # Version tag is sufficient and clearer
     for img in $DOCKER_IMAGES; do
         local image_name
         image_name=$(get_docker_image_name "$img")
         if docker_image_exists "$image_name" "$version"; then
-            docker tag "${image_name}:${version}" "${image_name}:latest" 2>&1 | tee -a "$log_file" || true
+            log_to_file "$log_file" "  ✓ ${image_name}:${version} already tagged"
         elif docker_image_exists "$image_name" "latest"; then
+            # If image exists with latest tag, tag it with version
             docker tag "${image_name}:latest" "${image_name}:${version}" 2>&1 | tee -a "$log_file" || true
+            log_to_file "$log_file" "  ✓ Tagged ${image_name}:latest → ${image_name}:${version}"
         fi
     done
 }
@@ -181,7 +183,7 @@ cmd_rebuild() {
     base_version=$("$PROJECT_ROOT/scripts/docker_version.sh" get base 2>/dev/null || echo "latest")
     BASE_VERSION="$base_version" docker-compose build --no-cache base 2>&1 | tee -a "$log_file" || true
     
-    # Tag base image
+    # Tag base image with version only
     docker tag "dcf-project-base:latest" "dcf-project-base:$base_version" 2>&1 | tee -a "$log_file" || true
     
     # Update hash after rebuild

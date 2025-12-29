@@ -1,24 +1,18 @@
-import requests
 import urllib3
-import time
-import json
-import os
 import sys
 from io import StringIO
-from datetime import datetime
 from ..utils.logger import get_logger
 from ..utils.cache_manager import get_cache_manager
 
 # Try to import data fetcher and redis client (optional)
 try:
-    from ..utils.data_fetcher import get_financial_ttm, get_market_data, get_shares_outstanding as get_shares_from_fetcher, save_to_all_caches
+    from ..utils.data_fetcher import get_financial_ttm, get_market_data, get_shares_outstanding as get_shares_from_fetcher
     HAS_DATA_FETCHER = True
 except ImportError:
     HAS_DATA_FETCHER = False
     get_financial_ttm = None
     get_market_data = None
     get_shares_from_fetcher = None
-    save_to_all_caches = None
 
 try:
     from ..utils.redis_client import get_redis_client
@@ -455,7 +449,7 @@ def get_shares_outstanding(ticker):
                 # Par value (mệnh giá) of FPT shares is 10,000 VND per share
                 par_value = 10000
                 shares_count = float(shares_capital) / par_value
-                    logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from charter capital {shares_capital:,.0f} VND)")
+                logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from charter capital {shares_capital:,.0f} VND)")
                 cache_manager.set_with_timestamp(ticker, "shares", shares_count)
                 
                 # Cache to Redis
@@ -507,7 +501,7 @@ def get_shares_outstanding(ticker):
                 shares_valid = (HAS_PANDAS and pd.notna(shares)) or (not HAS_PANDAS and shares is not None)
                 if shares_valid and shares > 0:
                     logger.info(f"Fetched shares outstanding for {ticker}: {shares:,.0f} (direct from {col_name})")
-                shares_value = float(shares)
+                    shares_value = float(shares)
                     cache_manager.set_with_timestamp(ticker, "shares", shares_value)
                     
                     # Cache to Redis

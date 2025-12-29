@@ -31,7 +31,8 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 if BASE_VERSION="$BASE_VERSION" docker-compose build $NO_CACHE_FLAG base; then
     log_success "Base image built successfully"
     
-    # Tag base image with both version and latest
+    # Tag base image with version only (no latest tag)
+    # Version tag is sufficient and clearer
     if docker_image_exists "dcf-project-base" "latest"; then
         docker tag "dcf-project-base:latest" "dcf-project-base:$BASE_VERSION" || true
         log_info "Tagged as: dcf-project-base:$BASE_VERSION"
@@ -44,7 +45,6 @@ if BASE_VERSION="$BASE_VERSION" docker-compose build $NO_CACHE_FLAG base; then
     log_info ""
     log_info "✅ Base image rebuild completed!"
     log_info "   Image: dcf-project-base:$BASE_VERSION"
-    log_info "   Image: dcf-project-base:latest"
     log_info ""
     log_info "Next steps:"
     log_info "   1. Rebuild service images: make docker-build"
