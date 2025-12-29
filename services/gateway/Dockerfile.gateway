@@ -13,7 +13,10 @@ WORKDIR /app
 # Copy common services utilities (required for imports)
 COPY services/common /app/services/common
 
-# Copy service code only (gateway doesn't need src/config/data)
+# Copy src directory (required for database_client import in service_utils)
+COPY src /app/src
+
+# Copy service code
 COPY services/gateway/main.py /app/main.py
 
 LABEL version="${VERSION}"

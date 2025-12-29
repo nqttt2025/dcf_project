@@ -218,7 +218,7 @@ services:
     image: dcf-project-frontend:dev
     container_name: dcf-frontend-dev
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - gateway
     networks:

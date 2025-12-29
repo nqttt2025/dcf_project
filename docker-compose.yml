@@ -210,7 +210,7 @@ services:
     image: dcf-project-frontend:${VERSION:-latest}
     container_name: dcf-frontend
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - gateway
     networks:

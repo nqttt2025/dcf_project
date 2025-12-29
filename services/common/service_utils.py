@@ -99,6 +99,8 @@ def get_database_health_status() -> Dict[str, Any]:
         Dict with database connection status
     """
     try:
+        # Setup project path before importing from src
+        setup_project_path()
         from src.utils.database_client import check_database_connection, get_database_info
         db_connected = check_database_connection()
         health_status = {

@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DCF Project - Health Status</title>
+    <title>DCF Project - Health Status Monitor</title>
+    <link rel="stylesheet" href="/static/css/style.css">
     <style>
         * {
             margin: 0;
@@ -19,31 +20,90 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
         .header {
             background: white;
             padding: 30px;
-            border-radius: 10px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-left h1 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 2em;
+        }
+
+        .header-left p {
+            color: #666;
+            font-size: 1em;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            background: #f3f4f6;
+            transform: translateY(-2px);
+        }
+
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .summary-item {
             text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f9fafb;
         }
 
-        .header h1 {
-            color: #333;
-            margin-bottom: 10px;
+        .summary-item .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
         }
 
-        .header p {
+        .summary-item .label {
             color: #666;
+            font-size: 0.9em;
         }
+
+        .summary-item.healthy .value { color: #10b981; }
+        .summary-item.unhealthy .value { color: #ef4444; }
+        .summary-item.warning .value { color: #f59e0b; }
 
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -51,22 +111,75 @@
         .status-card {
             background: white;
             padding: 25px;
-            border-radius: 10px;
+            border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
+
+        .status-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #e5e7eb;
+            transition: background 0.3s;
+        }
+
+        .status-card.healthy::before { background: #10b981; }
+        .status-card.unhealthy::before { background: #ef4444; }
+        .status-card.warning::before { background: #f59e0b; }
+        .status-card.unknown::before { background: #6b7280; }
 
         .status-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+        }
+
+        .status-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
         }
 
         .status-card h2 {
             color: #333;
-            margin-bottom: 15px;
-            font-size: 1.2em;
+            font-size: 1.3em;
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-badge.healthy {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.unhealthy {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-badge.unknown {
+            background: #f3f4f6;
+            color: #374151;
         }
 
         .status-indicator {
@@ -74,6 +187,12 @@
             height: 12px;
             border-radius: 50%;
             display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .status-indicator.healthy {
@@ -84,6 +203,7 @@
         .status-indicator.unhealthy {
             background: #ef4444;
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+            animation: none;
         }
 
         .status-indicator.warning {
@@ -93,6 +213,7 @@
 
         .status-indicator.unknown {
             background: #6b7280;
+            animation: none;
         }
 
         .status-details {
@@ -101,108 +222,279 @@
         }
 
         .status-details p {
-            margin: 5px 0;
+            margin: 8px 0;
             color: #666;
+            display: flex;
+            justify-content: space-between;
         }
 
         .status-details strong {
             color: #333;
         }
 
-        .refresh-btn {
+        .status-details .detail-value {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .metric-item {
+            text-align: center;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .metric-item .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .metric-item .metric-label {
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .expandable-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .expand-toggle {
+            background: #f3f4f6;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            color: #667eea;
+            width: 100%;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .expand-toggle:hover {
+            background: #e5e7eb;
+        }
+
+        .expand-content {
+            margin-top: 10px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+            display: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .expand-content.show {
+            display: block;
+        }
+
+        .expand-content pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .btn {
             background: #667eea;
             color: white;
             border: none;
             padding: 12px 24px;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 1em;
-            margin: 10px 5px;
-            transition: background 0.2s;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .refresh-btn:hover {
+        .btn:hover {
             background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
         }
 
-        .refresh-btn:disabled {
-            background: #ccc;
+        .btn:disabled {
+            background: #d1d5db;
             cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
         }
 
         .auto-refresh {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin: 10px 0;
         }
 
         .auto-refresh input[type="checkbox"] {
             width: 20px;
             height: 20px;
             cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .auto-refresh label {
+            color: #333;
+            font-weight: 500;
+            cursor: pointer;
         }
 
         .loading {
             text-align: center;
-            padding: 20px;
+            padding: 40px;
             color: #666;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .error {
-            color: #ef4444;
-            padding: 10px;
+            color: #991b1b;
+            padding: 15px;
             background: #fee2e2;
-            border-radius: 5px;
-            margin: 10px 0;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #ef4444;
         }
 
         .timestamp {
             text-align: center;
-            color: #666;
+            color: white;
             font-size: 0.9em;
             margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
         }
 
-        .details-section {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #e5e7eb;
-        }
-
-        .details-section h3 {
-            font-size: 0.9em;
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .details-section pre {
-            background: #f3f4f6;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
+        .response-time {
             font-size: 0.85em;
-            max-height: 200px;
-            overflow-y: auto;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+        }
+
+        .copy-btn {
+            background: #10b981;
+            padding: 6px 12px;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #059669;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏥 DCF Project Health Status</h1>
-            <p>Real-time monitoring of all microservices</p>
+            <div class="header-left">
+                <h1>🏥 Health Status Monitor</h1>
+                <p>Real-time monitoring of DCF Project microservices</p>
+            </div>
+            <div class="nav-links">
+                <a href="/">← Back to Stocks</a>
+                <a href="/static/database.html">Database Monitor</a>
+            </div>
         </div>
 
-        <div style="text-align: center; margin-bottom: 20px;">
-            <button class="refresh-btn" onclick="checkHealth()">🔄 Refresh</button>
+        <div class="controls">
+            <div>
+                <button class="btn" onclick="checkHealth()" id="refreshBtn">
+                    <span>🔄</span> Refresh
+                </button>
+                <button class="btn btn-secondary" onclick="exportData()">
+                    <span>📥</span> Export JSON
+                </button>
+            </div>
             <div class="auto-refresh">
                 <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
                 <label for="autoRefresh">Auto-refresh (30s)</label>
             </div>
         </div>
 
-        <div id="loading" class="loading">Loading health status...</div>
+        <div id="summaryCard" class="summary-card" style="display: none;">
+            <!-- Summary will be inserted here -->
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading health status...</p>
+        </div>
         <div id="error" class="error" style="display: none;"></div>
 
         <div id="statusGrid" class="status-grid" style="display: none;">
@@ -214,109 +506,218 @@
 
     <script>
         let autoRefreshInterval = null;
+        let healthData = null;
+        let responseTimes = {};
 
         async function checkHealth() {
             const loadingEl = document.getElementById('loading');
             const errorEl = document.getElementById('error');
             const statusGridEl = document.getElementById('statusGrid');
+            const summaryCardEl = document.getElementById('summaryCard');
             const timestampEl = document.getElementById('timestamp');
+            const refreshBtn = document.getElementById('refreshBtn');
 
             loadingEl.style.display = 'block';
             errorEl.style.display = 'none';
             statusGridEl.style.display = 'none';
+            summaryCardEl.style.display = 'none';
+            refreshBtn.disabled = true;
+
+            const startTime = performance.now();
 
             try {
                 // Check Gateway health (which includes all services)
+                const gatewayStart = performance.now();
                 const gatewayResponse = await fetch('/api/health');
                 const gatewayData = await gatewayResponse.json();
+                responseTimes.gateway = Math.round(performance.now() - gatewayStart);
 
-                // Check individual services
-                const services = [
-                    { name: 'Gateway', url: '/api/health', data: gatewayData },
-                    { name: 'DCF Service', url: '/api/dcf/health', data: gatewayData.services?.dcf },
-                    { name: 'Stock Service', url: '/api/stock/health', data: gatewayData.services?.stock },
-                    { name: 'Database Service', url: '/api/database/health', data: gatewayData.services?.database },
-                ];
+                // Check Database Service health separately for more details
+                let databaseData = null;
+                try {
+                    const dbStart = performance.now();
+                    const dbResponse = await fetch('/api/database/health');
+                    databaseData = await dbResponse.json();
+                    responseTimes.database = Math.round(performance.now() - dbStart);
+                } catch (e) {
+                    console.warn('Database health check failed:', e);
+                }
 
-                // Also check database and Redis from gateway
-                const dbStatus = gatewayData.gateway_database || {};
-                const redisStatus = gatewayData.services?.redis || {};
+                healthData = {
+                    gateway: gatewayData,
+                    database: databaseData,
+                    timestamp: new Date().toISOString(),
+                    totalResponseTime: Math.round(performance.now() - startTime)
+                };
 
-                displayStatus(services, dbStatus, redisStatus);
+                displaySummary(gatewayData);
+                displayStatus(gatewayData, databaseData);
                 
-                timestampEl.textContent = `Last updated: ${new Date().toLocaleString('vi-VN')}`;
+                timestampEl.innerHTML = `
+                    <strong>Last updated:</strong> ${new Date().toLocaleString('vi-VN')}<br>
+                    <span class="response-time">Total response time: ${healthData.totalResponseTime}ms</span>
+                `;
             } catch (error) {
                 errorEl.textContent = `Error checking health: ${error.message}`;
                 errorEl.style.display = 'block';
+                console.error('Health check error:', error);
             } finally {
                 loadingEl.style.display = 'none';
                 statusGridEl.style.display = 'grid';
+                summaryCardEl.style.display = 'grid';
+                refreshBtn.disabled = false;
             }
         }
 
-        function displayStatus(services, dbStatus, redisStatus) {
+        function displaySummary(gatewayData) {
+            const summaryCardEl = document.getElementById('summaryCard');
+            
+            const services = gatewayData.services || {};
+            let healthyCount = 0;
+            let unhealthyCount = 0;
+            let warningCount = 0;
+            const totalServices = Object.keys(services).length + 1; // +1 for gateway
+
+            // Count service statuses
+            if (gatewayData.status === 'healthy') healthyCount++;
+            else if (gatewayData.status === 'unhealthy') unhealthyCount++;
+            else warningCount++;
+
+            Object.values(services).forEach(service => {
+                if (service.status === 'healthy') healthyCount++;
+                else if (service.status === 'unhealthy') unhealthyCount++;
+                else warningCount++;
+            });
+
+            const overallStatus = unhealthyCount > 0 ? 'unhealthy' : (warningCount > 0 ? 'warning' : 'healthy');
+
+            summaryCardEl.innerHTML = `
+                <div class="summary-item ${overallStatus}">
+                    <div class="value">${totalServices}</div>
+                    <div class="label">Total Services</div>
+                </div>
+                <div class="summary-item healthy">
+                    <div class="value">${healthyCount}</div>
+                    <div class="label">Healthy</div>
+                </div>
+                <div class="summary-item ${warningCount > 0 ? 'warning' : 'healthy'}">
+                    <div class="value">${warningCount}</div>
+                    <div class="label">Warning</div>
+                </div>
+                <div class="summary-item ${unhealthyCount > 0 ? 'unhealthy' : 'healthy'}">
+                    <div class="value">${unhealthyCount}</div>
+                    <div class="label">Unhealthy</div>
+                </div>
+            `;
+        }
+
+        function displayStatus(gatewayData, databaseData) {
             const statusGridEl = document.getElementById('statusGrid');
             statusGridEl.innerHTML = '';
 
-            // Display service statuses
-            services.forEach(service => {
-                const card = createServiceCard(service.name, service.data);
+            // Gateway Card
+            const gatewayCard = createServiceCard('Gateway', gatewayData, 'gateway');
+            statusGridEl.appendChild(gatewayCard);
+
+            // Service Cards
+            const services = gatewayData.services || {};
+            Object.entries(services).forEach(([name, service]) => {
+                const serviceName = name.charAt(0).toUpperCase() + name.slice(1) + ' Service';
+                const serviceData = service.data || service;
+                const card = createServiceCard(serviceName, serviceData, name);
                 statusGridEl.appendChild(card);
             });
 
-            // Display database status
-            if (dbStatus) {
-                const dbCard = createDatabaseCard(dbStatus);
+            // Database Service Card (with more details)
+            if (databaseData) {
+                const dbCard = createDatabaseCard(databaseData);
                 statusGridEl.appendChild(dbCard);
             }
 
-            // Display Redis status
-            if (redisStatus) {
-                const redisCard = createRedisCard(redisStatus);
-                statusGridEl.appendChild(redisCard);
+            // Gateway Database Status
+            if (gatewayData.gateway_database) {
+                const gatewayDbCard = createGatewayDatabaseCard(gatewayData.gateway_database);
+                statusGridEl.appendChild(gatewayDbCard);
             }
         }
 
-        function createServiceCard(name, data) {
+        function createServiceCard(name, data, serviceKey) {
             const card = document.createElement('div');
             card.className = 'status-card';
 
             let status = 'unknown';
             let statusText = 'Unknown';
             let details = '';
+            const responseTime = responseTimes[serviceKey] || 'N/A';
 
             if (data) {
-                if (data.status === 'healthy' || (data.status && typeof data.status === 'object' && data.status.status === 'healthy')) {
+                if (data.status === 'healthy') {
                     status = 'healthy';
                     statusText = 'Healthy';
-                } else if (data.status === 'unavailable' || data.error) {
+                } else if (data.status === 'unhealthy' || data.error) {
                     status = 'unhealthy';
-                    statusText = 'Unavailable';
+                    statusText = 'Unhealthy';
                 } else {
                     status = 'warning';
                     statusText = 'Warning';
                 }
 
                 // Extract details
-                if (data.service) details += `<p><strong>Service:</strong> ${data.service}</p>`;
-                if (data.database) details += `<p><strong>Database:</strong> ${data.database}</strong></p>`;
-                if (data.error) details += `<p class="error"><strong>Error:</strong> ${data.error}</p>`;
+                if (data.service) details += `<p><strong>Service:</strong> <span class="detail-value">${data.service}</span></p>`;
+                if (data.version) details += `<p><strong>Version:</strong> <span class="detail-value">${data.version}</span></p>`;
+                if (data.database) {
+                    const dbStatus = typeof data.database === 'string' ? data.database : 'Connected';
+                    details += `<p><strong>Database:</strong> <span class="detail-value">${dbStatus}</span></p>`;
+                }
+                if (data.database_info) {
+                    details += `<p><strong>DB Name:</strong> <span class="detail-value">${data.database_info.database || 'N/A'}</span></p>`;
+                    if (data.database_info.active_connections) {
+                        details += `<p><strong>Active Connections:</strong> <span class="detail-value">${data.database_info.active_connections}</span></p>`;
+                    }
+                }
+                if (data.redis) {
+                    details += `<p><strong>Redis:</strong> <span class="detail-value">${data.redis}</span></p>`;
+                }
+                if (data.error) {
+                    details += `<p class="error"><strong>Error:</strong> ${data.error}</p>`;
+                }
             } else {
                 statusText = 'Not Checked';
             }
 
+            const cardId = `card-${serviceKey}`;
             card.innerHTML = `
-                <h2>
-                    <span class="status-indicator ${status}"></span>
-                    ${name}
-                </h2>
+                <div class="status-card-header">
+                    <h2>
+                        <span class="status-indicator ${status}"></span>
+                        ${name}
+                    </h2>
+                    <span class="status-badge ${status}">${statusText}</span>
+                </div>
                 <div class="status-details">
-                    <p><strong>Status:</strong> ${statusText}</p>
                     ${details}
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-value">${responseTime}ms</div>
+                            <div class="metric-label">Response Time</div>
+                        </div>
+                        ${data && data.timestamp ? `
+                            <div class="metric-item">
+                                <div class="metric-value">${formatTimestamp(data.timestamp)}</div>
+                                <div class="metric-label">Last Check</div>
+                            </div>
+                        ` : ''}
+                    </div>
                     ${data && typeof data === 'object' ? `
-                        <div class="details-section">
-                            <h3>Details:</h3>
-                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <div class="expandable-section">
+                            <button class="expand-toggle" onclick="toggleExpand('${cardId}')">
+                                <span>View Raw JSON</span>
+                                <span id="${cardId}-icon">▼</span>
+                            </button>
+                            <div class="expand-content" id="${cardId}-content">
+                                <pre>${JSON.stringify(data, null, 2)}</pre>
+                                <button class="btn copy-btn" onclick="copyToClipboard('${cardId}-content')">📋 Copy JSON</button>
+                            </div>
                         </div>
                     ` : ''}
                 </div>
@@ -325,56 +726,131 @@
             return card;
         }
 
-        function createDatabaseCard(dbStatus) {
+        function createDatabaseCard(dbData) {
             const card = document.createElement('div');
             card.className = 'status-card';
 
-            const connected = dbStatus.connected === true;
-            const status = connected ? 'healthy' : 'unhealthy';
-            const statusText = connected ? 'Connected' : 'Disconnected';
+            const overallStatus = dbData.overall_status || dbData.status || 'unknown';
+            const status = overallStatus === 'healthy' ? 'healthy' : 'unhealthy';
+            const statusText = overallStatus === 'healthy' ? 'Healthy' : 'Unhealthy';
 
             let details = '';
-            if (dbStatus.info) {
-                details += `<p><strong>Database:</strong> ${dbStatus.info.name || 'N/A'}</p>`;
-                details += `<p><strong>Size:</strong> ${dbStatus.info.size || 'N/A'}</p>`;
-                details += `<p><strong>Tables:</strong> ${dbStatus.info.table_count || 'N/A'}</p>`;
+            if (dbData.database) {
+                const dbStatus = dbData.database === 'healthy' ? 'Connected' : dbData.database;
+                details += `<p><strong>Database:</strong> <span class="detail-value">${dbStatus}</span></p>`;
             }
-            if (dbStatus.error) {
-                details += `<p class="error"><strong>Error:</strong> ${dbStatus.error}</p>`;
+            if (dbData.redis) {
+                const redisStatus = dbData.redis === 'healthy' ? 'Connected' : dbData.redis;
+                details += `<p><strong>Redis:</strong> <span class="detail-value">${redisStatus}</span></p>`;
+            }
+            if (dbData.service) {
+                details += `<p><strong>Service:</strong> <span class="detail-value">${dbData.service}</span></p>`;
             }
 
+            const responseTime = responseTimes.database || 'N/A';
+
             card.innerHTML = `
-                <h2>
-                    <span class="status-indicator ${status}"></span>
-                    PostgreSQL Database
-                </h2>
+                <div class="status-card-header">
+                    <h2>
+                        <span class="status-indicator ${status}"></span>
+                        Database Service (Detailed)
+                    </h2>
+                    <span class="status-badge ${status}">${statusText}</span>
+                </div>
                 <div class="status-details">
-                    <p><strong>Status:</strong> ${statusText}</p>
                     ${details}
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-value">${responseTime}ms</div>
+                            <div class="metric-label">Response Time</div>
+                        </div>
+                        ${dbData.timestamp ? `
+                            <div class="metric-item">
+                                <div class="metric-value">${formatTimestamp(dbData.timestamp)}</div>
+                                <div class="metric-label">Last Check</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="expandable-section">
+                        <button class="expand-toggle" onclick="toggleExpand('db-detailed')">
+                            <span>View Raw JSON</span>
+                            <span id="db-detailed-icon">▼</span>
+                        </button>
+                        <div class="expand-content" id="db-detailed-content">
+                            <pre>${JSON.stringify(dbData, null, 2)}</pre>
+                            <button class="btn copy-btn" onclick="copyToClipboard('db-detailed-content')">📋 Copy JSON</button>
+                        </div>
+                    </div>
                 </div>
             `;
 
             return card;
         }
 
-        function createRedisCard(redisStatus) {
+        function createGatewayDatabaseCard(dbStatus) {
             const card = document.createElement('div');
             card.className = 'status-card';
 
-            const status = redisStatus.status === 'healthy' ? 'healthy' : 'warning';
-            const statusText = redisStatus.status === 'healthy' ? 'Connected' : 'Unknown';
+            const hasError = dbStatus.database && dbStatus.database.includes('error');
+            const status = hasError ? 'warning' : 'healthy';
+            const statusText = hasError ? 'Warning' : 'Connected';
 
             card.innerHTML = `
-                <h2>
-                    <span class="status-indicator ${status}"></span>
-                    Redis Cache
-                </h2>
+                <div class="status-card-header">
+                    <h2>
+                        <span class="status-indicator ${status}"></span>
+                        Gateway Database Connection
+                    </h2>
+                    <span class="status-badge ${status}">${statusText}</span>
+                </div>
                 <div class="status-details">
-                    <p><strong>Status:</strong> ${statusText}</p>
+                    ${hasError ? `
+                        <p class="error"><strong>Note:</strong> ${dbStatus.database}</p>
+                    ` : `
+                        <p><strong>Status:</strong> <span class="detail-value">Connected</span></p>
+                    `}
                 </div>
             `;
 
             return card;
+        }
+
+        function toggleExpand(cardId) {
+            const content = document.getElementById(`${cardId}-content`);
+            const icon = document.getElementById(`${cardId}-icon`);
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                icon.textContent = '▼';
+            } else {
+                content.classList.add('show');
+                icon.textContent = '▲';
+            }
+        }
+
+        function copyToClipboard(elementId) {
+            const content = document.getElementById(elementId);
+            const pre = content.querySelector('pre');
+            const text = pre.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = content.querySelector('.copy-btn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✓ Copied!';
+                btn.style.background = '#10b981';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = '#10b981';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('vi-VN');
         }
 
         function toggleAutoRefresh() {
@@ -389,9 +865,24 @@
             }
         }
 
+        function exportData() {
+            if (!healthData) {
+                alert('No data to export. Please refresh first.');
+                return;
+            }
+
+            const dataStr = JSON.stringify(healthData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `health-status-${new Date().toISOString()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
         // Initial check
         checkHealth();
     </script>
 </body>
 </html>
-

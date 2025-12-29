@@ -255,7 +255,7 @@ cmd_up() {
     BASE_VERSION="$base_version" VERSION="$version" docker-compose up -d
     echo ""
     echo "Microservices started:"
-    echo "  - Frontend: http://localhost:8080"
+    echo "  - Frontend: http://localhost:8081"
     echo "  - Gateway: http://localhost:8000"
     echo "  - DCF Service: http://localhost:8001"
     echo "  - Stock Service: http://localhost:8002"
@@ -541,7 +541,7 @@ main() {
             docker-compose -f docker-compose.dev.yml up -d
             echo ""
             echo "Development services started:"
-            echo "  - Frontend: http://localhost:8080"
+            echo "  - Frontend: http://localhost:8081"
             echo "  - Gateway: http://localhost:8000 (hot reload enabled)"
             echo "  - DCF Service: http://localhost:8001 (hot reload enabled)"
             echo "  - Stock Service: http://localhost:8002 (hot reload enabled)"

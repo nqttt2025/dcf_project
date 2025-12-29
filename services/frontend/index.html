@@ -5,51 +5,671 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DCF Analysis Dashboard</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* Enhanced Header */
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-left h1 {
+            font-size: 2.5em;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: #666;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background: #f3f4f6;
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .nav-links a.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        /* Enhanced Status Bar */
+        .status-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .status-item:hover {
+            background: #f3f4f6;
+            transform: translateY(-2px);
+        }
+
+        .status-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        .status-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-value.running {
+            color: #f59e0b;
+            animation: pulse 2s infinite;
+        }
+
+        .status-value.success {
+            color: #10b981;
+        }
+
+        .status-value.warning {
+            color: #f59e0b;
+        }
+
+        .btn-refresh {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-refresh:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-refresh:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Enhanced Filters */
+        .filters {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+
+        #search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        #search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        #filter-status {
+            padding: 12px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            background: white;
+            transition: all 0.3s;
+            min-width: 150px;
+        }
+
+        #filter-status:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-action {
+            padding: 10px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #667eea;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover {
+            border-color: #667eea;
+            background: #f3f4f6;
+        }
+
+        /* Enhanced Stock Cards */
+        .stock-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            border-left: 5px solid transparent;
+        }
+
+        .stock-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #e5e7eb;
+            transition: background 0.3s;
+        }
+
+        .stock-card.has-result::before {
+            background: #10b981;
+        }
+
+        .stock-card.running::before {
+            background: #f59e0b;
+            animation: pulse-bar 2s infinite;
+        }
+
+        .stock-card.no-result::before {
+            background: #6b7280;
+        }
+
+        @keyframes pulse-bar {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .stock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .ticker {
+            font-size: 2em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-badge.running {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-badge.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.pending {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .stock-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .info-item:hover {
+            background: #f3f4f6;
+        }
+
+        .info-label {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .info-value.positive {
+            color: #10b981;
+        }
+
+        .info-value.negative {
+            color: #ef4444;
+        }
+
+        .upside-badge {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.2em;
+            margin-top: 15px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .upside-badge.positive {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+        }
+
+        .upside-badge.negative {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+        }
+
+        .stock-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .btn-run-dcf {
+            flex: 1;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-run-dcf:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-run-dcf:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: #95a5a6;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .loading {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .last-updated {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .status-bar {
+                grid-template-columns: 1fr;
+            }
+
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+
+            .stocks-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stock-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Stats Summary */
+        .stats-summary {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>📊 DCF Valuation Dashboard</h1>
-            <p class="subtitle">Phân tích định giá cổ phiếu VN30</p>
-            <nav style="margin-top: 15px;">
-                <a href="index.html" style="margin-right: 15px; color: #667eea; text-decoration: none;">Dashboard</a>
-                <a href="static/database.html" style="margin-right: 15px; color: #667eea; text-decoration: none;">Database</a>
-                <a href="static/health.html" style="color: #667eea; text-decoration: none;">Health Status</a>
+            <div class="header-left">
+                <h1>📊 DCF Valuation Dashboard</h1>
+                <p class="subtitle">Phân tích định giá cổ phiếu VN30</p>
+            </div>
+            <nav class="nav-links">
+                <a href="/" class="active">Dashboard</a>
+                <a href="/static/database.html">Database</a>
+                <a href="/static/health.html">Health Status</a>
             </nav>
         </header>
 
         <div class="status-bar">
             <div class="status-item">
-                <span class="status-label">Tổng số mã:</span>
+                <span class="status-label">📈 Tổng số mã</span>
                 <span class="status-value" id="total-stocks">-</span>
             </div>
             <div class="status-item">
-                <span class="status-label">Đã phân tích:</span>
-                <span class="status-value" id="analyzed-stocks">-</span>
+                <span class="status-label">✅ Đã phân tích</span>
+                <span class="status-value success" id="analyzed-stocks">-</span>
             </div>
             <div class="status-item">
-                <span class="status-label">Đang chạy:</span>
+                <span class="status-label">🔄 Đang chạy</span>
                 <span class="status-value running" id="running-stocks">-</span>
             </div>
-            <button class="btn-refresh" onclick="loadStocks()">🔄 Refresh</button>
+            <div class="status-item">
+                <button class="btn-refresh" onclick="loadStocks()" id="refreshBtn">
+                    <span>🔄</span> Refresh
+                </button>
+            </div>
         </div>
 
         <div class="filters">
-            <input type="text" id="search-input" placeholder="🔍 Tìm kiếm mã cổ phiếu..." onkeyup="filterStocks()">
-            <select id="filter-status" onchange="filterStocks()">
-                <option value="all">Tất cả</option>
-                <option value="has-result">Đã phân tích</option>
-                <option value="no-result">Chưa phân tích</option>
-                <option value="running">Đang chạy</option>
-            </select>
+            <div class="filter-group">
+                <label for="search-input">🔍</label>
+                <input type="text" id="search-input" placeholder="Tìm kiếm mã cổ phiếu..." onkeyup="filterStocks()">
+            </div>
+            <div class="filter-group">
+                <label for="filter-status">Lọc:</label>
+                <select id="filter-status" onchange="filterStocks()">
+                    <option value="all">Tất cả</option>
+                    <option value="has-result">✅ Đã phân tích</option>
+                    <option value="no-result">⏳ Chưa phân tích</option>
+                    <option value="running">🔄 Đang chạy</option>
+                </select>
+            </div>
+            <div class="quick-actions">
+                <button class="btn-action" onclick="exportData()">📥 Export</button>
+                <button class="btn-action" onclick="selectAll()">✓ Chọn tất cả</button>
+            </div>
         </div>
 
         <div class="stocks-grid" id="stocks-grid">
-            <div class="loading">Đang tải dữ liệu...</div>
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Đang tải dữ liệu...</p>
+            </div>
         </div>
     </div>
 
     <script src="/static/js/app.js"></script>
+    <script>
+        // Enhanced functions
+        function exportData() {
+            if (typeof allStocks === 'undefined' || allStocks.length === 0) {
+                if (typeof showNotification !== 'undefined') {
+                    showNotification('Không có dữ liệu để xuất', 'warning');
+                } else {
+                    alert('Không có dữ liệu để xuất');
+                }
+                return;
+            }
+
+            const dataStr = JSON.stringify({
+                export_date: new Date().toISOString(),
+                total: allStocks.length,
+                stocks: allStocks
+            }, null, 2);
+            
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `dcf-stocks-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            if (typeof showNotification !== 'undefined') {
+                showNotification('Đã xuất dữ liệu thành công', 'success');
+            }
+        }
+
+        function selectAll() {
+            if (typeof showNotification !== 'undefined') {
+                showNotification('Tính năng đang phát triển', 'info');
+            } else {
+                alert('Tính năng đang phát triển');
+            }
+        }
+
+        // Enhance loadStocks with loading state
+        document.addEventListener('DOMContentLoaded', function() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn && typeof loadStocks !== 'undefined') {
+                const originalLoadStocks = loadStocks;
+                window.loadStocks = async function() {
+                    refreshBtn.disabled = true;
+                    refreshBtn.innerHTML = '<span>⏳</span> Đang tải...';
+                    
+                    try {
+                        await originalLoadStocks();
+                        
+                        // Add last updated timestamp
+                        const grid = document.getElementById('stocks-grid');
+                        const existing = grid.querySelector('.last-updated');
+                        if (existing) existing.remove();
+                        
+                        const timestamp = document.createElement('div');
+                        timestamp.className = 'last-updated';
+                        timestamp.textContent = `Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
+                        grid.appendChild(timestamp);
+                    } finally {
+                        refreshBtn.disabled = false;
+                        refreshBtn.innerHTML = '<span>🔄</span> Refresh';
+                    }
+                };
+            }
+        });
+    </script>
 </body>
 </html>
-
