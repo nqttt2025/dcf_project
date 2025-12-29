@@ -86,17 +86,17 @@ class ResultManager:
             # Main valuation parameters
             f.write(f"{t('INPUT_PARAMETERS')}\n")
             f.write("-" * 80 + "\n")
-            if 'price' in data:
+            if 'price' in data and data['price'] is not None:
                 f.write(f"{t('MARKET_PRICE')}: {data['price']:,.2f} VND\n")
-            if 'eps' in data:
+            if 'eps' in data and data['eps'] is not None:
                 f.write(f"{t('EPS')}: {data['eps']:,.2f} VND\n")
-            if 'fcf' in data:
+            if 'fcf' in data and data['fcf'] is not None:
                 f.write(f"{t('FREE_CASH_FLOW_TTM')}: {data['fcf']:,.0f} VND\n")
-            if 'shares' in data:
+            if 'shares' in data and data['shares'] is not None:
                 f.write(f"{t('SHARES_OUTSTANDING')}: {data['shares']:,.0f}\n")
-            if 'market_cap' in data:
+            if 'market_cap' in data and data['market_cap'] is not None:
                 f.write(f"{t('MARKET_CAP')}: {data['market_cap']:,.0f} VND\n")
-            if 'growth_estimate' in data:
+            if 'growth_estimate' in data and data['growth_estimate'] is not None:
                 f.write(f"{t('GROWTH_ESTIMATE')}: {data['growth_estimate']:.2f}%\n")
             if 'dcf_params' in data and isinstance(data['dcf_params'], dict):
                 years = data['dcf_params'].get('yr', 5)
@@ -109,10 +109,18 @@ class ResultManager:
             f.write("=" * 80 + "\n")
             f.write(f"{t('VALUATION_RESULTS')}\n")
             f.write("=" * 80 + "\n")
-            f.write(f"{t('DCF_FAIR_VALUE')}: {data.get('dcf_fair_value', 'N/A'):,.2f} VND\n")
+            dcf_value = data.get('dcf_fair_value')
+            if dcf_value is not None and isinstance(dcf_value, (int, float)):
+                f.write(f"{t('DCF_FAIR_VALUE')}: {dcf_value:,.2f} VND\n")
+            else:
+                f.write(f"{t('DCF_FAIR_VALUE')}: N/A\n")
             if data.get('graham_fair_value'):
                 f.write(f"{t('GRAHAM_FAIR_VALUE')}: {data['graham_fair_value']:,.2f} VND\n")
-                f.write(f"{t('AVERAGE_FAIR_VALUE')}: {data.get('average_fair_value', 'N/A'):,.2f} VND\n")
+            avg_value = data.get('average_fair_value')
+            if avg_value is not None and isinstance(avg_value, (int, float)):
+                f.write(f"{t('AVERAGE_FAIR_VALUE')}: {avg_value:,.2f} VND\n")
+            else:
+                f.write(f"{t('AVERAGE_FAIR_VALUE')}: N/A\n")
             f.write("\n")
             
             # Upside/Downside Analysis

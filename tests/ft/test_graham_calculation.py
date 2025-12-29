@@ -53,11 +53,13 @@ growth_multiplier = 2.0
         test_data = {
             'eps': 5000,  # Earnings per share
             'ge': 10.0,  # 10% growth
+            'price': 50000.0,  # Current price (required for ge_priced_in calculation)
         }
         
         result = calculator.calculate_graham(test_data)
         
         # Verify result structure
+        self.assertIsNotNone(result, "Result should not be None")
         self.assertIn('fair_value', result)
         self.assertGreater(result['fair_value'], 0)
         
@@ -80,11 +82,13 @@ growth_multiplier = 2.0
         test_data = {
             'eps': 5000,
             'ge': 0.0,
+            'price': 50000.0,  # Current price (required for ge_priced_in calculation)
         }
         
         result = calculator.calculate_graham(test_data)
         
         # With zero growth, should use base PE only
+        self.assertIsNotNone(result, "Result should not be None")
         expected_value = test_data['eps'] * calculator.graham_params['base_pe']
         self.assertAlmostEqual(result['fair_value'], expected_value, places=2)
         
@@ -99,11 +103,13 @@ growth_multiplier = 2.0
         test_data = {
             'eps': 5000,
             'ge': 25.0,  # 25% growth
+            'price': 50000.0,  # Current price (required for ge_priced_in calculation)
         }
         
         result = calculator.calculate_graham(test_data)
         
         # High growth should result in higher fair value
+        self.assertIsNotNone(result, "Result should not be None")
         expected_value = test_data['eps'] * (
             calculator.graham_params['base_pe'] + 
             calculator.graham_params['growth_multiplier'] * test_data['ge']
@@ -127,6 +133,7 @@ growth_multiplier = 2.0
         test_data = {
             'eps': 5000,
             'ge': 10.0,
+            'price': 50000.0,  # Current price (required for ge_priced_in calculation)
         }
         
         result_pe10 = calculator_pe10.calculate_graham(test_data)

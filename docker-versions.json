@@ -6,19 +6,19 @@
   },
   "services": {
     "gateway": {
-      "current": "v5.0.8",
+      "current": "v6.0.1",
       "depends_on_base": true
     },
     "dcf": {
-      "current": "v5.0.8",
+      "current": "v6.0.1",
       "depends_on_base": true
     },
     "stock": {
-      "current": "v5.0.8",
+      "current": "v6.0.1",
       "depends_on_base": true
     },
     "frontend": {
-      "current": "v5.0.8",
+      "current": "v6.0.1",
       "depends_on_base": false
     }
   },
