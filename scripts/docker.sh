@@ -63,8 +63,9 @@ docker_build_images() {
             log_to_file "$log_file" "Removed latest tag (using version tag only)"
         fi
         
-        # Update hash after successful build
-        "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
+        # Update hash after successful build (only update hash, don't increment version)
+        # Version is only incremented when requirements.txt changes (handled by sync-git or manual update)
+        "$PROJECT_ROOT/scripts/version/docker_version.sh" update-hash >/dev/null 2>&1 || true
     else
         log_to_file "$log_file" "Base image unchanged (version: $base_version), using cached version"
         # Ensure base image is tagged correctly (version only)
@@ -220,8 +221,9 @@ cmd_rebuild() {
         log_to_file "$log_file" "Removed latest tag (using version tag only)"
     fi
     
-    # Update hash after rebuild
-    "$PROJECT_ROOT/scripts/version/docker_version.sh" update base >/dev/null 2>&1 || true
+    # Update hash after rebuild (only update hash, don't increment version)
+    # Version is only incremented when requirements.txt changes
+    "$PROJECT_ROOT/scripts/version/docker_version.sh" update-hash >/dev/null 2>&1 || true
     
     log_to_file "$log_file" "Building new images (--no-cache) with tag: $version..."
     log_to_file "$log_file" "Using BASE_VERSION=$base_version, VERSION=$version"

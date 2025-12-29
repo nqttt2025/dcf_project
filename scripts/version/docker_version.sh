@@ -283,7 +283,14 @@ cmd_update() {
     local service="${1:-base}"
     
     if [[ "$service" == "base" ]]; then
-        increment_base_version
+        # Only increment version if requirements.txt changed
+        # Otherwise just update hash
+        if check_base_needs_rebuild; then
+            increment_base_version
+        else
+            # Just update hash without incrementing version
+            update_base_hash
+        fi
     else
         # Get project version from git tag (single source of truth)
         local git_version
@@ -299,6 +306,11 @@ cmd_update() {
             exit 1
         fi
     fi
+}
+
+# Update hash only (without incrementing version)
+cmd_update_hash() {
+    update_base_hash
 }
 
 cmd_sync_git() {
@@ -317,7 +329,8 @@ show_help() {
     echo "  get [service]     - Get version for service (default: all)"
     echo "  set <service> <version> - Set version for service"
     echo "  check-base        - Check if base image needs rebuild"
-    echo "  update [service]  - Update version (base: increment, services: sync with git)"
+    echo "  update [service]  - Update version (base: increment only if requirements.txt changed, services: sync with git)"
+    echo "  update-hash       - Update base hash only (without incrementing version)"
     echo "  sync-git          - Sync all versions with git tag"
     echo "  help              - Show this help"
     echo ""
@@ -327,6 +340,7 @@ show_help() {
     echo "  $0 get gateway            # Get gateway version"
     echo "  $0 set base v1.1.0        # Set base version"
     echo "  $0 check-base             # Check if base needs rebuild"
+    echo "  $0 update-hash            # Update base hash only"
     echo "  $0 sync-git               # Sync with git tag"
 }
 
@@ -349,6 +363,9 @@ main() {
             ;;
         update)
             cmd_update "${2:-base}"
+            ;;
+        update-hash)
+            cmd_update_hash
             ;;
         sync-git)
             cmd_sync_git
