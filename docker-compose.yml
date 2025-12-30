@@ -92,6 +92,7 @@ services:
       - sync-service
     volumes:
       - ./config/ssl:/app/ssl:ro
+      - ./logs:/app/logs
     networks:
       - dcf-network
     restart: unless-stopped
@@ -220,18 +221,12 @@ services:
       - "8004:8004"
     environment:
       - PYTHONUNBUFFERED=1
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=dcf_user
-      - POSTGRES_PASSWORD=dcf_password
-      - POSTGRES_DB=dcf_db
-      - DATABASE_SERVICE_URL=http://database:8003
+      - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
       - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
     depends_on:
       - redis
       - postgres
-      - database
     volumes:
       - ./logs:/app/logs
     networks:

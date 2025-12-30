@@ -17,8 +17,10 @@ COPY services/common /app/services/common
 # Copy project source code
 COPY src /app/src
 
-# Copy service code
+# Copy service code (including database and data_fetcher modules)
 COPY services/sync-service/main.py /app/main.py
+COPY services/sync-service/database.py /app/database.py
+COPY services/sync-service/data_fetcher.py /app/data_fetcher.py
 
 # Create necessary directories
 RUN mkdir -p /app/logs/app /app/logs/docker

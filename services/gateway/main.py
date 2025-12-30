@@ -431,73 +431,50 @@ async def get_database_relationships():
     """Lấy thông tin về mối quan hệ giữa các bảng"""
     return await make_service_request(DATABASE_SERVICE_URL, "GET", "/api/database/relationships")
 
-@app.post("/api/database/sync/growth-metrics")
-async def sync_growth_metrics(ticker: Optional[str] = Query(None)):
-    """Tính toán và sync growth metrics từ financial_data"""
-    url = f"/api/database/sync/growth-metrics"
-    if ticker:
-        url += f"?ticker={ticker}"
-    return await make_service_request(DATABASE_SERVICE_URL, "POST", url)
+# ============================================================================
+# Legacy Database Sync Routes - Now redirected to Sync Service
+# ============================================================================
+# Note: All sync operations are now handled by sync-service
+# These routes are kept for backward compatibility
 
 @app.post("/api/database/sync/{table_name}")
-async def sync_table(
+async def sync_table_legacy(
     table_name: str,
     ticker: Optional[str] = Query(None),
     days: int = Query(30, ge=1, le=365)
 ):
-    """Sync data for a specific table (runs in background)"""
-    url = f"/api/database/sync/{table_name}"
+    """Sync data for a specific table - Redirects to sync-service"""
+    url = f"/api/sync/{table_name}"
     params = []
     if ticker:
         params.append(f"ticker={ticker}")
-    if table_name == "market_data":
+    if table_name == "market_data" or table_name == "market-data":
         params.append(f"days={days}")
     if params:
         url += "?" + "&".join(params)
-    # Increase timeout for sync start (not the actual sync)
-    return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
-
-@app.get("/api/database/sync/{table_name}/status")
-async def get_sync_status(
-    table_name: str,
-    ticker: Optional[str] = Query(None)
-):
-    """Get sync status for a table"""
-    url = f"/api/database/sync/{table_name}/status"
-    if ticker:
-        url += f"?ticker={ticker}"
-    return await make_service_request(DATABASE_SERVICE_URL, "GET", url, timeout=10.0)
-
-@app.get("/api/database/sync/jobs")
-async def list_sync_jobs():
-    """List all active sync jobs"""
-    return await make_service_request(DATABASE_SERVICE_URL, "GET", "/api/database/sync/jobs", timeout=10.0)
-
-@app.post("/api/database/sync/jobs/{job_id}/trigger")
-async def trigger_scheduled_job(job_id: str):
-    """Trigger a scheduled job manually"""
-    return await make_service_request(DATABASE_SERVICE_URL, "POST", f"/api/database/sync/jobs/{job_id}/trigger", timeout=30.0)
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
 
 @app.post("/api/database/sync/current-price")
-async def sync_current_price(ticker: Optional[str] = Query(None)):
-    """Sync current stock price"""
-    url = f"/api/database/sync/current-price"
-    params = {}
-    if ticker:
-        params['ticker'] = ticker
-    # Build URL with query params
-    if params:
-        from urllib.parse import urlencode
-        url += f"?{urlencode(params)}"
-    return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
-
-@app.post("/api/database/sync/base-pe")
-async def sync_base_pe(ticker: Optional[str] = Query(None)):
-    """Update base PE for stocks"""
-    url = f"/api/database/sync/base-pe"
+async def sync_current_price_legacy(ticker: Optional[str] = Query(None)):
+    """Sync current stock price - Redirects to sync-service"""
+    url = "/api/sync/current-price"
     if ticker:
         url += f"?ticker={ticker}"
-    return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
+@app.post("/api/database/sync/base-pe")
+async def sync_base_pe_legacy(ticker: Optional[str] = Query(None)):
+    """Update base PE for stocks - Redirects to sync-service"""
+    url = "/api/sync/base-pe"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
+@app.get("/api/database/stocks")
+async def list_stocks(is_active: bool = True, skip: int = 0, limit: int = 100):
+    """Get list of all stocks from database"""
+    url = f"/api/database/stocks?is_active={is_active}&skip={skip}&limit={limit}"
+    return await make_service_request(DATABASE_SERVICE_URL, "GET", url, timeout=30.0)
 
 @app.get("/api/database/stocks/{ticker}")
 async def get_stock_info(ticker: str):
@@ -508,6 +485,68 @@ async def get_stock_info(ticker: str):
 # Sync Service Routes - Forward requests to Data Sync Service
 # ============================================================================
 
+# Direct Sync API Endpoints
+@app.post("/api/sync/current-price")
+async def sync_current_price(ticker: Optional[str] = Query(None)):
+    """Sync current stock price via sync-service"""
+    url = "/api/sync/current-price"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
+@app.post("/api/sync/market-data")
+async def sync_market_data(
+    ticker: Optional[str] = Query(None),
+    days: int = Query(7)
+):
+    """Sync market data (OHLCV) via sync-service"""
+    url = f"/api/sync/market-data?days={days}"
+    if ticker:
+        url += f"&ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=600.0)
+
+@app.post("/api/sync/financial-data")
+async def sync_financial_data(ticker: Optional[str] = Query(None)):
+    """Sync financial data via sync-service"""
+    url = "/api/sync/financial-data"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=600.0)
+
+@app.post("/api/sync/shares-outstanding")
+async def sync_shares_outstanding(ticker: Optional[str] = Query(None)):
+    """Sync shares outstanding via sync-service"""
+    url = "/api/sync/shares-outstanding"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
+@app.post("/api/sync/base-pe")
+async def sync_base_pe(ticker: Optional[str] = Query(None)):
+    """Sync base PE via sync-service"""
+    url = "/api/sync/base-pe"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
+@app.post("/api/sync/{table_name}")
+async def sync_table(
+    table_name: str,
+    ticker: Optional[str] = Query(None),
+    days: int = Query(7)
+):
+    """Generic sync endpoint for any table via sync-service"""
+    url = f"/api/sync/{table_name}"
+    params = []
+    if ticker:
+        params.append(f"ticker={ticker}")
+    if table_name in ["market_data", "market-data"]:
+        params.append(f"days={days}")
+    if params:
+        url += "?" + "&".join(params)
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=600.0)
+
+# Job Management Endpoints
 @app.get("/api/sync/jobs")
 async def list_sync_jobs():
     """List all sync jobs"""
@@ -586,49 +625,26 @@ async def get_logs(
                 )
             
             try:
-                # Try to read from log file first (service_logger writes to /app/logs/app/{service}.log)
+                # Try to read from shared log file (mounted via docker volume ./logs:/app/logs)
                 log_file_path = f"/app/logs/app/{service.lower()}.log"
                 
-                # If requesting gateway logs, read directly from file (same container)
-                if service.lower() == "gateway":
-                    try:
-                        with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
-                            all_lines = f.readlines()
-                            log_lines = [line.rstrip('\n') for line in all_lines[-lines:]]
-                        if log_lines:
-                            result[service] = {
-                                "logs": log_lines,
-                                "container": container_name,
-                                "lines": len(log_lines),
-                                "source": "log_file"
-                            }
-                        else:
-                            raise FileNotFoundError("Log file is empty")
-                    except (FileNotFoundError, IOError) as e:
-                        # Fallback to Docker logs
-                        pass
-                else:
-                    # For other services, use docker exec
-                    cmd_read_file = ["docker", "exec", container_name, "tail", "-n", str(lines), log_file_path]
-                    process_file = await asyncio.create_subprocess_exec(
-                        *cmd_read_file,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    stdout_file, stderr_file = await process_file.communicate()
-                    
-                    if process_file.returncode == 0 and stdout_file and stdout_file.strip():
-                        log_output = stdout_file.decode('utf-8', errors='replace')
-                        log_lines = [line.rstrip('\n') for line in log_output.split('\n') if line.strip()]
-                        if log_lines:
-                            result[service] = {
-                                "logs": log_lines,
-                                "container": container_name,
-                                "lines": len(log_lines),
-                                "source": "log_file"
-                            }
-                        else:
-                            raise FileNotFoundError("Log file is empty")
+                # Read log file directly from shared volume
+                try:
+                    with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        all_lines = f.readlines()
+                        log_lines = [line.rstrip('\n') for line in all_lines[-lines:] if line.strip()]
+                    if log_lines:
+                        result[service] = {
+                            "logs": log_lines,
+                            "container": container_name,
+                            "lines": len(log_lines),
+                            "source": "log_file"
+                        }
+                    else:
+                        raise FileNotFoundError("Log file is empty")
+                except (FileNotFoundError, IOError) as e:
+                    # Log file doesn't exist, will try docker logs fallback
+                    pass
                 
                 # If we didn't set result yet, fallback to Docker logs
                 if service not in result:
@@ -682,51 +698,28 @@ async def get_logs(
                     "lines": 0
                 }
         else:
-            # Get logs for all services
+            # Get logs for all services from shared log volume
             for svc_name, container_name in SERVICE_CONTAINERS.items():
                 try:
                     log_file_path = f"/app/logs/app/{svc_name.lower()}.log"
                     
-                    # If gateway, read directly from file (same container)
-                    if svc_name.lower() == "gateway":
-                        try:
-                            with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
-                                all_lines = f.readlines()
-                                log_lines = [line.rstrip('\n') for line in all_lines[-lines:]]
-                            if log_lines:
-                                result[svc_name] = {
-                                    "logs": log_lines,
-                                    "container": container_name,
-                                    "lines": len(log_lines),
-                                    "source": "log_file"
-                                }
-                            else:
-                                raise FileNotFoundError("Log file is empty")
-                        except (FileNotFoundError, IOError):
-                            # Fallback to Docker logs
-                            pass
-                    else:
-                        # For other services, use docker exec to read log file
-                        cmd_read_file = ["docker", "exec", container_name, "tail", "-n", str(lines), log_file_path]
-                        process_file = await asyncio.create_subprocess_exec(
-                            *cmd_read_file,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        stdout_file, stderr_file = await process_file.communicate()
-                        
-                        if process_file.returncode == 0 and stdout_file and stdout_file.strip():
-                            log_output = stdout_file.decode('utf-8', errors='replace')
-                            log_lines = [line.rstrip('\n') for line in log_output.split('\n') if line.strip()]
-                            if log_lines:
-                                result[svc_name] = {
-                                    "logs": log_lines,
-                                    "container": container_name,
-                                    "lines": len(log_lines),
-                                    "source": "log_file"
-                                }
-                            else:
-                                raise FileNotFoundError("Log file is empty")
+                    # Read log file directly from shared volume
+                    try:
+                        with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
+                            all_lines = f.readlines()
+                            log_lines = [line.rstrip('\n') for line in all_lines[-lines:] if line.strip()]
+                        if log_lines:
+                            result[svc_name] = {
+                                "logs": log_lines,
+                                "container": container_name,
+                                "lines": len(log_lines),
+                                "source": "log_file"
+                            }
+                        else:
+                            raise FileNotFoundError("Log file is empty")
+                    except (FileNotFoundError, IOError):
+                        # Log file doesn't exist, will try docker logs fallback
+                        pass
                     
                     # If we didn't set result yet, fallback to Docker logs
                     if svc_name not in result:

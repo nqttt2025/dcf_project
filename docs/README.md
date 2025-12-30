@@ -1,58 +1,56 @@
 # DCF Project Documentation
 
-**Last Updated:** 2025-12-30  
-**Version:** 2.1
+**Version:** 3.0  
+**Last Updated:** 2025-12-30
 
-### Recent Updates (2025-12-30)
-- ✅ Scripts directory refactored following SOLID principles
-- ✅ Python scripts organized into analysis/ and utils/ directories
-- ✅ Comprehensive test suite added for scripts
-- ✅ Improved path resolution for all scripts
-- ✅ Documentation consolidated and updated
+## Recent Updates (2025-12-30)
+- ✅ **Architecture refactored**: Sync operations moved to dedicated Sync Service
+- ✅ **Database Service**: Now read-only for data viewing
+- ✅ **Sync Service**: Direct PostgreSQL connection for all sync operations
+- ✅ **Documentation consolidated**: Merged and organized docs
 
-Chào mừng đến với documentation của DCF Valuation Project! Documentation được tổ chức theo các chủ đề để dễ tìm kiếm và sử dụng.
+Chào mừng đến với documentation của DCF Valuation Project!
 
 ## 📚 Cấu Trúc Documentation
 
 ### 🚀 [Getting Started](getting-started/)
 **Dành cho người mới bắt đầu**
-- Quick Start Guide
-- Installation Guide
-- First Steps
+- [Quick Start Guide](getting-started/quick-start.md) ⭐
+- [Installation Guide](getting-started/installation.md)
+- [First Steps](getting-started/first-steps.md)
 
 ### 💼 [Business](business/)
 **Business của dự án**
-- Project Overview
-- Goals & Objectives
-- Vision (Short-term & Long-term)
-- Current Features
-- Value Proposition
+- [Overview](business/overview.md) ⭐
+- [Goals & Objectives](business/goals.md)
+- [Features](business/features.md)
+- [Vision](business/vision.md)
 
 ### 🏗️ [Architecture](architecture/)
-**Cấu trúc và kiến trúc dự án**
-- Project Structure
-- Microservices Architecture
-- Docker Architecture
-- System Design
+**Cấu trúc và kiến trúc**
+- [Microservices Architecture](architecture/microservices.md) ⭐ **UPDATED**
+- [Sync Service](architecture/sync-service.md) ⭐ **NEW**
+- [Project Structure](architecture/project-structure.md)
+- [Database](architecture/database/)
+- [Docker](architecture/docker.md)
 
 ### 🔧 [Operations](operations/)
 **Quản lý và vận hành**
-- Version Management
-- Docker Management
-- Build Optimization
-- Deployment
+- [Version Management](operations/version-management.md) ⭐
+- [Docker Management](operations/docker-version-management.md)
+- [Build Optimization](operations/build-optimization.md)
 
 ### 📖 [Reference](reference/)
 **Tài liệu tham khảo**
-- DCF Calculation
-- Graham Valuation
-- API Reference
-- Technical Details
+- [API Reference](reference/api.md) ⭐ **UPDATED**
+- [DCF Calculation](reference/dcf-calculation.md)
+- [Graham Valuation](reference/graham-valuation.md)
+- [vnstock Data Format](reference/VNSTOCK_DATA_FORMAT.md)
 
 ### 📜 [Historical](historical/)
-**Tài liệu lịch sử**
+**Tài liệu lịch sử** (chỉ để tham khảo)
 - Old implementation notes
-- Historical fixes and changes
+- Historical fixes
 - Legacy documentation
 
 ## 🎯 Quick Navigation
@@ -60,87 +58,87 @@ Chào mừng đến với documentation của DCF Valuation Project! Documentati
 ### Cho Người Mới
 1. **[Getting Started](getting-started/README.md)** - Bắt đầu từ đây
 2. **[Business Overview](business/overview.md)** - Hiểu về dự án
-3. **[Quick Start Guide](getting-started/quick-start.md)** - Chạy dự án
+3. **[Quick Start Guide](getting-started/quick-start.md)** - Chạy trong 5 phút
 
 ### Cho Developers
-1. **[Architecture](architecture/README.md)** - Hiểu cấu trúc
-2. **[Development Guide](architecture/development.md)** - Phát triển
-3. **[Reference](reference/README.md)** - Tham khảo kỹ thuật
+1. **[Microservices Architecture](architecture/microservices.md)** - Hiểu kiến trúc ⭐
+2. **[Sync Service](architecture/sync-service.md)** - Data sync architecture ⭐
+3. **[API Reference](reference/api.md)** - API endpoints
 
 ### Cho DevOps
 1. **[Operations](operations/README.md)** - Vận hành
 2. **[Version Management](operations/version-management.md)** - Quản lý version
-3. **[Docker Guide](operations/docker.md)** - Docker
+3. **[Docker Management](operations/docker-version-management.md)** - Docker
 
-## 📋 Main Documents
+## 🏛️ System Architecture
 
-### ⭐ Must Read
-- **[Getting Started](getting-started/README.md)** - Bắt đầu với dự án
-- **[Business Overview](business/overview.md)** - Hiểu về business
-- **[Project Structure](architecture/project-structure.md)** - Cấu trúc dự án
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        FRONTEND (Nginx)                          │
+│                          Port: 8081                              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      GATEWAY (FastAPI)                           │
+│                         Port: 8000                               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ DCF Service  │    │Stock Service │    │ Sync Service │
+│   :8001      │    │   :8002      │    │   :8004      │
+└──────────────┘    └──────────────┘    └───────┬──────┘
+        │                   │                   │
+        └───────────────────┼───────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│Database Svc  │    │ PostgreSQL   │    │    Redis     │
+│   :8003      │    │   :5432      │    │    :6379     │
+│ (Read-only)  │    │              │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘
+```
 
-### 📚 Important
-- **[Architecture](architecture/README.md)** - Kiến trúc hệ thống
-- **[Version Management](operations/version-management.md)** - Quản lý version
-- **[Features](business/features.md)** - Tính năng hiện có
+## 📋 Services Summary
 
-## 🔍 Search Documentation
+| Service | Port | Role |
+|---------|------|------|
+| Frontend | 8081 | Static files, Nginx |
+| Gateway | 8000 | API routing, SSL |
+| DCF | 8001 | DCF/Graham analysis |
+| Stock | 8002 | Stock info, status |
+| Database | 8003 | Data viewing (read-only) |
+| Sync | 8004 | Data sync (write) |
+| PostgreSQL | 5432 | Data storage |
+| Redis | 6379 | Cache, status |
 
-### Tìm theo Chủ Đề
+## 🚀 Quick Start
 
-**Business & Goals**
-- [Business Overview](business/overview.md)
-- [Goals & Objectives](business/goals.md)
-- [Vision](business/vision.md)
-- [Features](business/features.md)
+```bash
+# Start all services
+make docker-up
 
-**Architecture & Structure**
-- [Project Structure](architecture/project-structure.md)
-- [Microservices](architecture/microservices.md)
-- [Docker](architecture/docker.md)
+# View frontend
+open http://localhost:8081
 
-**Getting Started**
-- [Quick Start](getting-started/quick-start.md)
-- [Installation](getting-started/installation.md)
+# View API docs
+open https://localhost:8000/docs
 
-**Operations**
-- [Version Management](operations/version-management.md)
-- [Docker Management](operations/docker.md)
-- [Build Optimization](operations/build-optimization.md)
-
-**Reference**
-- [DCF Calculation](reference/dcf-calculation.md)
-- [Graham Valuation](reference/graham-valuation.md)
-- [API Reference](reference/api.md)
+# Stop services
+make docker-down
+```
 
 ## 📝 Document Status
 
-- ✅ **Current**: Document được cập nhật và phản ánh đúng trạng thái hiện tại
-- ⭐ **Important**: Document quan trọng, nên đọc
-- 📜 **Historical**: Document lịch sử, chỉ để tham khảo
-
-## 🤝 Contributing
-
-Khi thêm documentation mới:
-1. Đặt file vào đúng folder theo chủ đề
-2. Cập nhật README.md trong folder đó
-3. Cập nhật index này nếu cần
-
-## 📞 Support
-
-Nếu có câu hỏi về documentation:
-1. Kiểm tra [Getting Started](getting-started/README.md)
-2. Xem [FAQ](getting-started/faq.md) (nếu có)
-3. Kiểm tra [Reference](reference/README.md) cho technical details
+- ✅ **Current**: Up-to-date
+- ⭐ **Important**: Must read
+- 📜 **Historical**: Reference only
 
 ---
 
+**Version:** 3.0  
 **Last Updated:** 2025-12-30  
-**Version:** 2.1  
 **Maintainer:** Project Team
-
-### Recent Updates (2025-12-30)
-- ✅ Scripts directory refactored following SOLID principles
-- ✅ Python scripts organized into analysis/ and utils/ directories
-- ✅ Comprehensive test suite added for scripts
-- ✅ Documentation updated with new scripts structure

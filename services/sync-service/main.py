@@ -1,5 +1,11 @@
 """
 Data Sync Service - Chuyên biệt cho việc sync dữ liệu chứng khoán
+
+This service handles all data synchronization operations:
+- Fetches data from vnstock API
+- Saves directly to PostgreSQL
+- Updates Redis cache
+- Manages sync jobs and scheduling
 """
 import sys
 from pathlib import Path
@@ -15,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
+from sqlalchemy.orm import Session
 import asyncio
 import logging
 import json
@@ -26,17 +33,24 @@ from pydantic import BaseModel
 from services.common import create_health_response, get_service_urls
 from src.utils.service_logger import setup_service_logger
 
+# Import database connection and data_fetcher - using absolute imports
+# since main.py runs as a standalone module
+try:
+    # Try relative import first (when running as package)
+    from .database import get_db, get_db_session, check_database_connection
+    from . import data_fetcher
+except ImportError:
+    # Fallback to direct import (when running as standalone)
+    from database import get_db, get_db_session, check_database_connection
+    import data_fetcher
+
 logger = setup_service_logger('sync-service', level=logging.INFO)
 
-app = FastAPI(title="Data Sync Service", version="1.0.0")
+app = FastAPI(title="Data Sync Service", version="2.0.0")
 
-# Get service URLs
-service_urls = get_service_urls()
-DATABASE_SERVICE_URL = service_urls.get("database", "http://database:8003")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
-# Note: Database connection will be added later when implementing persistent storage
-# For now, using in-memory storage
+# Database connection is now direct via SQLAlchemy
 
 # Job storage (in-memory for now, will move to database)
 jobs_store = {}
@@ -439,173 +453,163 @@ async def execute_job(job_id: str, execution_id: str):
             add_log(execution_id, "ERROR", f"Job execution failed: {str(e)}")
 
 async def sync_current_price_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
-    """Sync current price with progress tracking"""
-    import httpx
+    """Sync current price with progress tracking - Direct database access"""
     
     # Step 1: Fetching data from vnstock API
     if steps and len(steps) > 0:
         update_progress(execution_id, steps[0]["name"], steps[0]["percent"], "Connecting to vnstock API...")
     
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        url = f"{DATABASE_SERVICE_URL}/api/database/sync/current-price"
-        if ticker:
-            url += f"?ticker={ticker}"
-        response = await client.post(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to sync current price: {response.text}")
-        
-        result = response.json()
-        
-        # Step 2: Database updated (done by database service)
-        if steps and len(steps) > 1:
-            update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
-        
-        # Step 3: Update Redis cache
-        if steps and len(steps) > 2:
-            update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
-            await update_redis_cache_after_sync("current_price", ticker, result)
-        
-        # Step 4: Finalizing
-        if steps and len(steps) > 3:
-            update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
-        
-        return result
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_current_price_blocking, ticker)
+    
+    # Step 2: Database updated
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    # Step 3: Update Redis cache
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
+        await update_redis_cache_after_sync("current_price", ticker, result)
+    
+    # Step 4: Finalizing
+    if steps and len(steps) > 3:
+        update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_current_price_blocking(ticker: Optional[str] = None) -> Dict:
+    """Blocking sync current price - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_current_price(db, ticker)
 
 async def sync_current_price(ticker: Optional[str] = None):
     """Sync current price (legacy, for backward compatibility)"""
     return await sync_current_price_with_progress("", ticker, [])
 
 async def sync_market_data_with_progress(execution_id: str, ticker: Optional[str] = None, days: int = 7, steps: List[Dict] = None):
-    """Sync market data with progress tracking"""
-    import httpx
+    """Sync market data with progress tracking - Direct database access"""
     
     # Step 1: Fetching historical data
     if steps and len(steps) > 0:
         update_progress(execution_id, steps[0]["name"], steps[0]["percent"], f"Fetching {days} days of data...")
     
-    async with httpx.AsyncClient(timeout=600.0) as client:
-        url = f"{DATABASE_SERVICE_URL}/api/database/sync/market_data?days={days}"
-        if ticker:
-            url += f"&ticker={ticker}"
-        response = await client.post(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to sync market data: {response.text}")
-        
-        result = response.json()
-        
-        # Step 2: Database updated
-        if steps and len(steps) > 1:
-            update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
-        
-        # Step 3: Update Redis cache
-        if steps and len(steps) > 2:
-            update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
-            await update_redis_cache_after_sync("market_data", ticker, result)
-        
-        # Step 4: Finalizing
-        if steps and len(steps) > 3:
-            update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
-        
-        return result
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_market_data_blocking, ticker, days)
+    
+    # Step 2: Database updated
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    # Step 3: Update Redis cache
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
+        await update_redis_cache_after_sync("market_data", ticker, result)
+    
+    # Step 4: Finalizing
+    if steps and len(steps) > 3:
+        update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_market_data_blocking(ticker: Optional[str] = None, days: int = 7) -> Dict:
+    """Blocking sync market data - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_market_data(db, ticker, days)
 
 async def sync_market_data(ticker: Optional[str] = None, days: int = 7):
     """Sync market data (legacy)"""
     return await sync_market_data_with_progress("", ticker, days, [])
 
 async def sync_financial_data_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
-    """Sync financial data with progress tracking"""
-    import httpx
+    """Sync financial data with progress tracking - Direct database access"""
     
     if steps and len(steps) > 0:
         update_progress(execution_id, steps[0]["name"], steps[0]["percent"], "Fetching financial statements...")
     
-    async with httpx.AsyncClient(timeout=600.0) as client:
-        url = f"{DATABASE_SERVICE_URL}/api/database/sync/financial_data"
-        if ticker:
-            url += f"?ticker={ticker}"
-        response = await client.post(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to sync financial data: {response.text}")
-        
-        result = response.json()
-        
-        if steps and len(steps) > 1:
-            update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
-        
-        if steps and len(steps) > 2:
-            update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
-            await update_redis_cache_after_sync("financial_data", ticker, result)
-        
-        if steps and len(steps) > 3:
-            update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
-        
-        return result
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_financial_data_blocking, ticker)
+    
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
+        await update_redis_cache_after_sync("financial_data", ticker, result)
+    
+    if steps and len(steps) > 3:
+        update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_financial_data_blocking(ticker: Optional[str] = None) -> Dict:
+    """Blocking sync financial data - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_financial_data(db, ticker)
 
 async def sync_financial_data(ticker: Optional[str] = None):
     """Sync financial data (legacy)"""
     return await sync_financial_data_with_progress("", ticker, [])
 
 async def sync_shares_outstanding_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
-    """Sync shares outstanding with progress tracking"""
-    import httpx
+    """Sync shares outstanding with progress tracking - Direct database access"""
     
     if steps and len(steps) > 0:
         update_progress(execution_id, steps[0]["name"], steps[0]["percent"], "Fetching shares data...")
     
-    async with httpx.AsyncClient(timeout=600.0) as client:
-        url = f"{DATABASE_SERVICE_URL}/api/database/sync/shares_outstanding"
-        if ticker:
-            url += f"?ticker={ticker}"
-        response = await client.post(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to sync shares outstanding: {response.text}")
-        
-        result = response.json()
-        
-        if steps and len(steps) > 1:
-            update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
-        
-        if steps and len(steps) > 2:
-            update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
-            await update_redis_cache_after_sync("shares_outstanding", ticker, result)
-        
-        if steps and len(steps) > 3:
-            update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
-        
-        return result
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_shares_outstanding_blocking, ticker)
+    
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
+        await update_redis_cache_after_sync("shares_outstanding", ticker, result)
+    
+    if steps and len(steps) > 3:
+        update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_shares_outstanding_blocking(ticker: Optional[str] = None) -> Dict:
+    """Blocking sync shares outstanding - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_shares_outstanding(db, ticker)
 
 async def sync_shares_outstanding(ticker: Optional[str] = None):
     """Sync shares outstanding (legacy)"""
     return await sync_shares_outstanding_with_progress("", ticker, [])
 
 async def sync_base_pe_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
-    """Sync base PE with progress tracking"""
-    import httpx
+    """Sync base PE with progress tracking - Direct database access"""
     
     if steps and len(steps) > 0:
         update_progress(execution_id, steps[0]["name"], steps[0]["percent"], "Calculating PE ratios...")
     
-    async with httpx.AsyncClient(timeout=600.0) as client:
-        url = f"{DATABASE_SERVICE_URL}/api/database/sync/base-pe"
-        if ticker:
-            url += f"?ticker={ticker}"
-        response = await client.post(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to sync base PE: {response.text}")
-        
-        result = response.json()
-        
-        if steps and len(steps) > 1:
-            update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
-        
-        if steps and len(steps) > 2:
-            update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
-            await update_redis_cache_after_sync("base_pe", ticker, result)
-        
-        if steps and len(steps) > 3:
-            update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
-        
-        return result
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_base_pe_blocking, ticker)
+    
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Updating Redis cache...")
+        await update_redis_cache_after_sync("base_pe", ticker, result)
+    
+    if steps and len(steps) > 3:
+        update_progress(execution_id, steps[3]["name"], steps[3]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_base_pe_blocking(ticker: Optional[str] = None) -> Dict:
+    """Blocking sync base PE - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_base_pe(db, ticker)
 
 async def sync_base_pe(ticker: Optional[str] = None):
     """Sync base PE (legacy)"""
@@ -705,6 +709,97 @@ async def stop_job(job_id: str, execution_id: Optional[str] = None):
         "message": f"Job '{job_id}' stopped",
         "execution_id": execution_id
     }
+
+# =============================================================================
+# Direct Sync API Endpoints (for gateway routing)
+# =============================================================================
+
+@app.post("/api/sync/current-price")
+async def api_sync_current_price(ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided")):
+    """Sync current price for stocks - Direct API endpoint"""
+    try:
+        result = await sync_current_price(ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing current price: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync/market-data")
+async def api_sync_market_data(
+    ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided"),
+    days: int = Query(7, description="Number of days to sync")
+):
+    """Sync market data (OHLCV) for stocks - Direct API endpoint"""
+    try:
+        result = await sync_market_data(ticker, days)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing market data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync/financial-data")
+async def api_sync_financial_data(ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided")):
+    """Sync financial data (income statement, cash flow) for stocks - Direct API endpoint"""
+    try:
+        result = await sync_financial_data(ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing financial data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync/shares-outstanding")
+async def api_sync_shares_outstanding(ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided")):
+    """Sync shares outstanding for stocks - Direct API endpoint"""
+    try:
+        result = await sync_shares_outstanding(ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing shares outstanding: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync/base-pe")
+async def api_sync_base_pe(ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided")):
+    """Sync base PE ratio for stocks - Direct API endpoint"""
+    try:
+        result = await sync_base_pe(ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing base PE: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync/{table_name}")
+async def api_sync_table(
+    table_name: str,
+    ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided"),
+    days: int = Query(7, description="Number of days for market_data sync")
+):
+    """Generic sync endpoint for any table - Direct API endpoint"""
+    table_mapping = {
+        'market_data': sync_market_data,
+        'financial_data': sync_financial_data,
+        'shares_outstanding': sync_shares_outstanding,
+        'current_price': sync_current_price,
+        'base_pe': sync_base_pe,
+    }
+    
+    if table_name not in table_mapping:
+        raise HTTPException(status_code=400, detail=f"Unknown table: {table_name}. Valid tables: {list(table_mapping.keys())}")
+    
+    try:
+        if table_name == 'market_data':
+            result = await table_mapping[table_name](ticker, days)
+        else:
+            result = await table_mapping[table_name](ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing {table_name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

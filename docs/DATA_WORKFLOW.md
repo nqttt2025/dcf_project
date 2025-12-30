@@ -1,260 +1,171 @@
-# Workflow Lấy và Cập Nhật Dữ Liệu
+# Data Workflow
 
-## Workflow Hiện Tại
+**Version:** 2.0  
+**Last Updated:** 2025-12-30
 
-### 1. **Frontend - Trang Chính (`/`)**
+## Workflow Hiện Tại (NEW Architecture)
 
-#### Cập nhật dữ liệu:
-- **Polling Interval**: 30 giây (cố định)
-- **Cơ chế**: `setInterval(loadStocks, 30000)`
-- **API Endpoint**: `/api/stocks`
-- **Luồng dữ liệu**:
-  ```
-  Frontend (30s) → Gateway → Stock Service → Database Service → PostgreSQL
-                                                      ↓
-                                              Result Files (JSON)
-  ```
+### 1. Data Sync Flow
 
-#### Quy trình:
-1. Frontend gọi `/api/stocks` mỗi 30 giây
-2. Stock Service:
-   - Đọc config files từ `config/` directory
-   - Đọc result files từ `data/results/`
-   - **Fetch giá từ Database Service** (parallel cho tất cả tickers)
-   - Merge dữ liệu và trả về
-3. Frontend render lại danh sách stocks
-
-#### Hạn chế:
-- ❌ Polling cố định 30s, không linh hoạt
-- ❌ Không có real-time updates
-- ❌ Phải đợi đến lượt polling mới thấy thay đổi
-- ❌ Tốn bandwidth và server resources
-
----
-
-### 2. **Frontend - Trang Database (`/static/database.html`)**
-
-#### Cập nhật dữ liệu:
-- **Auto-refresh Jobs**: 5 giây (có thể bật/tắt)
-- **Cơ chế**: `setInterval(loadSyncJobs, 5000)`
-- **API Endpoint**: `/api/database/sync/jobs`
-- **Polling Sync Status**: 1 giây khi có job đang chạy
-
-#### Quy trình:
-1. Load scheduled jobs từ database
-2. Auto-refresh mỗi 5 giây để cập nhật trạng thái jobs
-3. Khi trigger sync job:
-   - Poll status mỗi 1 giây
-   - Dừng khi job completed/failed
-
----
-
-### 3. **Backend - Sync Service**
-
-#### Các loại sync jobs:
-
-1. **Current Price Sync** (`sync_current_price`)
-   - **Nguồn**: vnstock API
-   - **Đích**: `market_data` table trong PostgreSQL
-   - **Cách trigger**: Manual (qua Scheduled Jobs UI)
-   - **Delay**: 1 giây giữa mỗi stock (tránh rate limit)
-
-2. **Market Data Sync** (`sync_market_data`)
-   - **Nguồn**: vnstock API
-   - **Đích**: `market_data` table
-   - **Tham số**: `days` (7 hoặc 30 ngày)
-   - **Delay**: 2 giây giữa mỗi stock
-
-3. **Financial Data Sync** (`sync_financial_data`)
-   - **Nguồn**: vnstock API
-   - **Đích**: `financial_data` table
-   - **Delay**: 2 giây giữa mỗi stock
-
-4. **Shares Outstanding Sync** (`sync_shares_outstanding`)
-   - **Nguồn**: vnstock API
-   - **Đích**: `shares_outstanding` table
-
-5. **Base PE Update** (`sync_base_pe`)
-   - **Nguồn**: Tính toán từ dữ liệu hiện có
-   - **Đích**: `stocks` table
-
-#### Quy trình sync:
 ```
-Manual Trigger → Database Service → Sync Service → vnstock API
-                                              ↓
-                                        PostgreSQL
-                                              ↓
-                                    Redis (cache)
+┌─────────────────────────────────────────────────────────────────────┐
+│                       DATA SYNC WORKFLOW                             │
+│                                                                      │
+│  User triggers sync (via Frontend or API)                           │
+│         │                                                            │
+│         ▼                                                            │
+│    Gateway (/api/sync/*)                                             │
+│         │                                                            │
+│         ▼                                                            │
+│    ┌─────────────────────────────────────┐                          │
+│    │         SYNC SERVICE                 │                          │
+│    │  ┌─────────────────────────────┐    │                          │
+│    │  │     data_fetcher.py         │    │      ┌──────────────┐   │
+│    │  │  - sync_current_price()     │───────────►  vnstock API  │   │
+│    │  │  - sync_market_data()       │    │      └──────────────┘   │
+│    │  │  - sync_financial_data()    │    │                          │
+│    │  │  - sync_shares_outstanding()│    │                          │
+│    │  └─────────────┬───────────────┘    │                          │
+│    │                │                     │                          │
+│    │                ▼ Direct SQL          │                          │
+│    │         ┌──────────────┐            │                          │
+│    │         │  PostgreSQL  │            │                          │
+│    │         └──────────────┘            │                          │
+│    │                │                     │                          │
+│    │                ▼                     │                          │
+│    │         ┌──────────────┐            │                          │
+│    │         │    Redis     │            │                          │
+│    │         │  (cache)     │            │                          │
+│    │         └──────────────┘            │                          │
+│    └─────────────────────────────────────┘                          │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### 2. Data Viewing Flow
 
-## Đề Xuất: Cập Nhật Theo Thời Gian Thực
-
-### Giải Pháp 1: Server-Sent Events (SSE) - Khuyến nghị
-
-#### Ưu điểm:
-- ✅ Real-time updates
-- ✅ Dễ implement với FastAPI
-- ✅ Tự động reconnect khi mất kết nối
-- ✅ Hỗ trợ tốt bởi browsers
-- ✅ Ít overhead hơn WebSocket
-
-#### Implementation:
-
-**Backend (Gateway Service)**:
-```python
-@app.get("/api/stocks/stream")
-async def stream_stocks():
-    """SSE endpoint for real-time stock updates"""
-    async def event_generator():
-        while True:
-            # Fetch latest data
-            stocks_data = await get_latest_stocks()
-            yield f"data: {json.dumps(stocks_data)}\n\n"
-            await asyncio.sleep(5)  # Update every 5 seconds
-    
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
-    )
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                       DATA VIEWING WORKFLOW                          │
+│                                                                      │
+│  User opens Stock Info page                                         │
+│         │                                                            │
+│         ▼                                                            │
+│    Frontend (stock-info.html)                                        │
+│         │                                                            │
+│         ▼                                                            │
+│    Gateway (/api/database/stocks/{ticker})                           │
+│         │                                                            │
+│         ▼                                                            │
+│    ┌─────────────────────────────────────┐                          │
+│    │       DATABASE SERVICE               │                          │
+│    │         (Read-only)                  │                          │
+│    │                │                     │                          │
+│    │                ▼                     │                          │
+│    │         ┌──────────────┐            │                          │
+│    │         │  PostgreSQL  │            │                          │
+│    │         │   (query)    │            │                          │
+│    │         └──────────────┘            │                          │
+│    └─────────────────────────────────────┘                          │
+│         │                                                            │
+│         ▼                                                            │
+│    Return comprehensive stock info                                   │
+│    (market_data + financial_data + metrics)                         │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Frontend**:
-```javascript
-const eventSource = new EventSource('/api/stocks/stream');
+### 3. DCF Analysis Flow
 
-eventSource.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    updateStocks(data.stocks);
-};
-
-eventSource.onerror = (error) => {
-    console.error('SSE error:', error);
-    // Auto-reconnect handled by browser
-};
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     DCF ANALYSIS WORKFLOW                            │
+│                                                                      │
+│  User clicks "Run DCF"                                              │
+│         │                                                            │
+│         ▼                                                            │
+│    Gateway (/api/stocks/{ticker}/run)                                │
+│         │                                                            │
+│         ▼                                                            │
+│    ┌─────────────────────────────────────┐                          │
+│    │          DCF SERVICE                 │                          │
+│    │                                      │                          │
+│    │  1. Set status in Redis (running)   │                          │
+│    │         │                            │                          │
+│    │         ▼                            │                          │
+│    │  2. Read data from:                  │                          │
+│    │     - Config files                   │                          │
+│    │     - PostgreSQL                     │                          │
+│    │     - Redis cache                    │                          │
+│    │         │                            │                          │
+│    │         ▼                            │                          │
+│    │  3. Calculate DCF valuation          │                          │
+│    │     - Free cash flow                 │                          │
+│    │     - Discount rate                  │                          │
+│    │     - Terminal value                 │                          │
+│    │         │                            │                          │
+│    │         ▼                            │                          │
+│    │  4. Calculate Graham valuation       │                          │
+│    │         │                            │                          │
+│    │         ▼                            │                          │
+│    │  5. Save results (JSON files)        │                          │
+│    │  6. Update Redis status (completed)  │                          │
+│    └─────────────────────────────────────┘                          │
+│         │                                                            │
+│         ▼                                                            │
+│    Frontend polls status via Stock Service                           │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## Sync Jobs
 
-### Giải Pháp 2: WebSocket - Cho tương tác 2 chiều
+### Các loại sync jobs:
 
-#### Ưu điểm:
-- ✅ Real-time bidirectional communication
-- ✅ Có thể gửi commands từ client
-- ✅ Hỗ trợ nhiều clients cùng lúc
+| Job Type | Nguồn | Đích | Trigger |
+|----------|-------|------|---------|
+| `current_price` | vnstock API | `market_data` table | Manual/Scheduled |
+| `market_data` | vnstock API | `market_data` table | Manual (7/30 days) |
+| `financial_data` | vnstock API | `financial_data` table | Manual/Weekly |
+| `shares_outstanding` | vnstock API | `shares_outstanding` table | Manual |
+| `base_pe` | Calculated | `stocks` table | Manual |
 
-#### Nhược điểm:
-- ❌ Phức tạp hơn SSE
-- ❌ Cần quản lý connections
-- ❌ Overhead cao hơn
+### Job Management
 
----
+Quản lý jobs qua:
+- **UI**: `http://localhost:8081/static/jobs.html`
+- **API**: `POST /api/sync/jobs/{job_id}/run`
 
-### Giải Pháp 3: Smart Polling với Adaptive Interval
+## Service Responsibilities
 
-#### Ưu điểm:
-- ✅ Dễ implement (chỉ cần sửa frontend)
-- ✅ Giảm bandwidth khi không có thay đổi
-- ✅ Tăng tần suất khi có activity
+| Service | Responsibilities |
+|---------|------------------|
+| **Sync Service** | vnstock API calls, Data fetching, PostgreSQL writes, Job management |
+| **Database Service** | Data viewing (GET only), Table schema, Stock info |
+| **DCF Service** | DCF calculation, Graham valuation, Result storage |
+| **Stock Service** | Stock list, Analysis status, Price display |
 
-#### Implementation:
+## Frontend Pages
 
-```javascript
-let pollInterval = 30000; // Start with 30s
-let lastUpdateTime = Date.now();
+| Page | URL | Data Source |
+|------|-----|-------------|
+| Dashboard | `/` | Stock Service → PostgreSQL |
+| Stock Info | `/static/stock-info.html` | Database Service → PostgreSQL |
+| Database | `/static/database.html` | Database Service → PostgreSQL |
+| Jobs | `/static/jobs.html` | Sync Service |
+| Monitoring | `/static/monitoring.html` | Gateway → All Services |
 
-async function loadStocks() {
-    const response = await fetch('/api/stocks');
-    const data = await response.json();
-    
-    // Check if data changed
-    const dataHash = JSON.stringify(data.stocks.map(s => ({
-        ticker: s.ticker,
-        price: s.current_price,
-        status: s.is_running
-    })));
-    
-    if (dataHash !== lastDataHash) {
-        // Data changed - increase polling frequency
-        pollInterval = 5000; // Poll every 5s
-        lastUpdateTime = Date.now();
-        lastDataHash = dataHash;
-    } else {
-        // No changes - gradually increase interval
-        const timeSinceUpdate = Date.now() - lastUpdateTime;
-        if (timeSinceUpdate > 60000) {
-            pollInterval = Math.min(pollInterval * 1.5, 30000); // Max 30s
-        }
-    }
-    
-    updateStocks(data.stocks);
-    
-    // Schedule next poll
-    clearTimeout(pollTimeout);
-    pollTimeout = setTimeout(loadStocks, pollInterval);
-}
-```
+## Data Refresh
+
+### Automatic Refresh
+- **Dashboard**: Polls `/api/stocks` every 30 seconds
+- **Jobs**: Auto-refresh every 5 seconds (configurable)
+- **Monitoring**: Real-time via SSE
+
+### Manual Sync
+Trigger sync qua Jobs page hoặc API calls.
 
 ---
 
-### Giải Pháp 4: Hybrid - SSE + Smart Polling
-
-#### Kết hợp:
-- **SSE** cho real-time updates khi có thay đổi
-- **Polling** làm fallback khi SSE không available
-- **Adaptive interval** để tối ưu bandwidth
-
----
-
-## Khuyến Nghị Implementation
-
-### Bước 1: Implement SSE cho Stock Updates (Ưu tiên cao)
-
-1. **Backend**: Thêm SSE endpoint trong Gateway Service
-2. **Frontend**: Thay thế `setInterval` bằng `EventSource`
-3. **Fallback**: Giữ polling làm backup
-
-### Bước 2: Implement Smart Polling cho Database Page
-
-1. **Adaptive interval**: 5s khi có jobs running, 30s khi idle
-2. **Event-driven**: Chỉ refresh khi cần thiết
-
-### Bước 3: Thêm WebSocket cho Interactive Features (Tùy chọn)
-
-1. Trigger jobs qua WebSocket
-2. Real-time progress updates
-3. Chat/notifications
-
----
-
-## Lợi Ích Khi Cập Nhật Real-time
-
-1. **User Experience**:
-   - Thấy thay đổi ngay lập tức
-   - Không cần refresh trang
-   - Cảm giác responsive hơn
-
-2. **Performance**:
-   - Giảm unnecessary requests
-   - Tối ưu bandwidth
-   - Giảm server load
-
-3. **Business Value**:
-   - Dữ liệu luôn fresh
-   - Quyết định nhanh hơn
-   - Competitive advantage
-
----
-
-## Timeline Đề Xuất
-
-- **Week 1**: Implement SSE cho stock updates
-- **Week 2**: Implement smart polling cho database page
-- **Week 3**: Testing và optimization
-- **Week 4**: Deploy và monitor
-
+**Version:** 2.0  
+**Last Updated:** 2025-12-30

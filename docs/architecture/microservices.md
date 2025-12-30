@@ -1,178 +1,256 @@
 # Microservices Architecture
 
-DCF Analysis Project được tổ chức theo kiến trúc microservices, tương tự như dự án mẫu `/home/eenitug/learning_python/services`.
+**Version:** 3.0  
+**Last Updated:** 2025-12-30
 
-## Kiến trúc
+DCF Analysis Project được tổ chức theo kiến trúc microservices với phân chia trách nhiệm rõ ràng.
+
+## Kiến trúc Tổng quan
 
 ```
-┌─────────────┐
-│  Frontend   │
-│  (Nginx)    │
-│  :8080      │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Gateway   │
-│  (FastAPI)  │
-│  :8000      │
-└──────┬──────┘
-       │
-       ├──────────────┬──────────────┐
-       ▼              ▼              ▼
-┌──────────┐    ┌──────────┐    ┌──────────┐
-│   DCF    │    │  Stock   │    │  Redis   │
-│ Service  │    │ Service  │    │  Cache   │
-│ :8001    │    │ :8002    │    │ :6379    │
-└──────┬───┘    └────┬─────┘    └──────────┘
-       │             │
-       └─────────────┘
-       (Read/Write Status)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           FRONTEND LAYER                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Frontend (Nginx) :8081                            │    │
+│  │     index.html | stock-info.html | database.html | jobs.html        │    │
+│  │                        monitoring.html                               │    │
+│  └───────────────────────────────┬─────────────────────────────────────┘    │
+└──────────────────────────────────┼──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           API GATEWAY LAYER                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Gateway (FastAPI) :8000                           │    │
+│  │           Routes, Load Balancing, Health Checks, SSL                │    │
+│  └───────────────────────────────┬─────────────────────────────────────┘    │
+└──────────────────────────────────┼──────────────────────────────────────────┘
+                                   │
+           ┌───────────────────────┼───────────────────────┐
+           │                       │                       │
+           ▼                       ▼                       ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   DCF Service    │    │  Stock Service   │    │  Sync Service    │
+│   (FastAPI)      │    │   (FastAPI)      │    │   (FastAPI)      │
+│    :8001         │    │    :8002         │    │    :8004         │
+├──────────────────┤    ├──────────────────┤    ├──────────────────┤
+│ DCF Analysis     │    │ Stock Info       │    │ Data Sync        │
+│ Graham Valuation │    │ Price Fetching   │    │ Job Management   │
+│ Result Storage   │    │ Config Files     │    │ vnstock API      │
+└────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘
+         │                       │                       │
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           ▼                     ▼                     ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│ Database Service │    │   PostgreSQL     │    │     Redis        │
+│   (FastAPI)      │    │     :5432        │    │     :6379        │
+│    :8003         │    │                  │    │                  │
+├──────────────────┤    ├──────────────────┤    ├──────────────────┤
+│ Data Viewing     │    │ Persistent       │    │ Caching          │
+│ Table Schema     │    │ Storage          │    │ Status Tracking  │
+│ Stock Info API   │    │ Stock Data       │    │ Analysis Status  │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
-## Services
+## Services Chi Tiết
 
-### 1. Gateway Service (`services/gateway/`)
-- **Role**: API Gateway - Route requests đến các microservices
+### 1. Frontend Service (`services/frontend/`)
+- **Role**: Serve static files và reverse proxy
+- **Technology**: Nginx
+- **Port**: 8081
+- **Pages**:
+  - `/` - Dashboard chính
+  - `/static/stock-info.html` - Thông tin cổ phiếu
+  - `/static/database.html` - Quản lý database
+  - `/static/jobs.html` - Quản lý sync jobs
+  - `/static/monitoring.html` - System monitoring
+
+### 2. Gateway Service (`services/gateway/`)
+- **Role**: API Gateway - Route requests, health checks, SSL termination
 - **Technology**: FastAPI
 - **Port**: 8000
-- **Endpoints**:
-  - `GET /` - Root endpoint
-  - `GET /health` - Health check (checks all services)
-  - `GET /api/stocks` - List stocks (→ Stock Service)
-  - `GET /api/stocks/{ticker}` - Stock detail (→ Stock Service)
-  - `POST /api/stocks/{ticker}/run` - Run DCF analysis (→ DCF Service)
-  - `GET /api/analysis/{ticker}` - Get analysis result (→ DCF Service)
+- **Key Endpoints**:
+  - `GET /health` - Health check tất cả services
+  - `GET /api/stocks` - List stocks
+  - `POST /api/stocks/{ticker}/run` - Run DCF analysis
+  - `GET /api/database/*` - Database operations
+  - `POST /api/sync/*` - Sync operations
 
-### 2. DCF Service (`services/dcf/`)
-- **Role**: Xử lý phân tích DCF
+### 3. DCF Service (`services/dcf/`)
+- **Role**: Xử lý phân tích DCF và Graham valuation
 - **Technology**: FastAPI
 - **Port**: 8001
 - **Endpoints**:
-  - `GET /` - Root endpoint
-  - `GET /health` - Health check
   - `POST /analyze/{ticker}` - Run DCF analysis (async)
   - `GET /analysis/{ticker}` - Get analysis result
-  - `GET /status` - Service status
+  - `GET /status` - Running analyses status
 
-### 3. Stock Service (`services/stock/`)
-- **Role**: Quản lý thông tin cổ phiếu
+### 4. Stock Service (`services/stock/`)
+- **Role**: Quản lý thông tin và giá cổ phiếu
 - **Technology**: FastAPI
 - **Port**: 8002
 - **Endpoints**:
-  - `GET /` - Root endpoint
-  - `GET /health` - Health check
-  - `GET /stocks` - List all stocks
+  - `GET /stocks` - List all stocks với current price
   - `GET /stocks/{ticker}` - Stock detail
-  - `GET /stocks/{ticker}/config` - Stock config
-  - `GET /stocks/{ticker}/status` - Stock status
-  - `GET /status` - System status
+  - `GET /stocks/{ticker}/status` - Analysis status
 
-### 4. Frontend Service (`services/frontend/`)
-- **Role**: Serve static files (HTML, CSS, JS)
-- **Technology**: Nginx
-- **Port**: 8080 (mapped to 80)
-- **Features**: 
-  - Reverse proxy to Gateway
-  - Real-time progress bars
-  - Stock list display
+### 5. Sync Service (`services/sync-service/`) ⭐ NEW
+- **Role**: **Tất cả sync operations** - Kết nối trực tiếp PostgreSQL
+- **Technology**: FastAPI + SQLAlchemy
+- **Port**: 8004
+- **Key Features**:
+  - Kết nối **trực tiếp** đến PostgreSQL (không qua Database Service)
+  - Gọi vnstock API để fetch data
+  - Job management (create, run, stop, history)
+  - Redis cache updates
+- **Endpoints**:
+  - `POST /api/sync/current-price` - Sync giá hiện tại
+  - `POST /api/sync/market-data` - Sync OHLCV data
+  - `POST /api/sync/financial-data` - Sync báo cáo tài chính
+  - `POST /api/sync/shares-outstanding` - Sync số lượng cổ phiếu
+  - `POST /api/sync/base-pe` - Cập nhật base PE
+  - `GET /api/jobs` - List sync jobs
+  - `POST /api/jobs/{job_id}/run` - Run job
 
-### 5. Database Service
-- **Role**: Database operations và data synchronization
-- **Technology**: FastAPI + SQLAlchemy + PostgreSQL
+### 6. Database Service (`services/database/`)
+- **Role**: **Data viewing only** - Không có sync logic
+- **Technology**: FastAPI + SQLAlchemy
 - **Port**: 8003
-- **Features**:
-  - Database CRUD operations
-  - Data sync với vnstock API
-  - Database health monitoring
-  - Table statistics
-- **Database**: PostgreSQL 15 (port 5432)
-
-### 6. Redis Service
-- **Role**: Real-time status tracking và caching
-- **Technology**: Redis 7-alpine
-- **Port**: 6379
-- **Features**:
-  - Analysis status tracking (`analysis:{ticker}`)
-  - Data caching (`stock:{ticker}:*`)
-  - Progress updates caching
-  - TTL-based expiration
-- **Usage**: DCF và Stock services read/write status và cache data
+- **Key Features**:
+  - GET endpoints để xem data
+  - Table schema information
+  - Stock comprehensive info
+  - Database statistics
+- **Endpoints**:
+  - `GET /api/database/stocks` - List stocks
+  - `GET /api/database/stocks/{ticker}` - Stock comprehensive info
+  - `GET /api/database/tables` - List tables
+  - `GET /api/database/stats` - Database statistics
 
 ### 7. PostgreSQL Database
 - **Role**: Persistent data storage
 - **Technology**: PostgreSQL 15-alpine
-- **Port**: 5432
-- **Features**:
-  - Stock information
-  - Financial data
-  - Market data
-  - DCF results
-  - Sync logs
+- **Port**: 5432 (container), 5433 (host)
+- **Tables**: stocks, market_data, financial_data, shares_outstanding, growth_metrics
 
-### 8. Common (`services/common/`)
-- **Role**: Shared Dockerfile.base và requirements.txt
-- **Purpose**: Base image cho các Python services
-- **Dependencies**: Python 3.11 + common packages (FastAPI, pandas, redis, SQLAlchemy, etc.)
+### 8. Redis Cache
+- **Role**: Caching và status tracking
+- **Technology**: Redis 7-alpine
+- **Port**: 6379
+- **Usage**:
+  - Analysis status tracking (`analysis:{ticker}`)
+  - Market data cache (`market:{ticker}`)
+  - Financial data cache (`financial:{ticker}`)
+
+## Phân Chia Trách Nhiệm (NEW Architecture)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SERVICE RESPONSIBILITIES                      │
+├────────────────────┬────────────────────────────────────────────┤
+│    Sync Service    │         Database Service                   │
+│  (sync-service)    │       (database service)                   │
+├────────────────────┼────────────────────────────────────────────┤
+│ ✓ vnstock API      │ ✓ Data viewing (GET)                      │
+│ ✓ Data fetching    │ ✓ Table schema                            │
+│ ✓ PostgreSQL write │ ✓ Stock info                              │
+│ ✓ Job management   │ ✓ Database statistics                     │
+│ ✓ Redis cache      │ ✗ NO sync operations                      │
+│ ✓ Scheduling       │ ✗ NO vnstock calls                        │
+└────────────────────┴────────────────────────────────────────────┘
+```
 
 ## Communication Flow
 
-### Standard Request Flow
-1. **Client Request** → Frontend (Nginx)
-2. **Frontend** → Gateway (proxy `/api/*`)
-3. **Gateway** → Appropriate Service (DCF or Stock)
-4. **Service** → Process request
-5. **Service** → Return response
-6. **Gateway** → Return to Frontend
-7. **Frontend** → Return to Client
+### Sync Data Flow
+```
+User clicks "Sync" on Frontend
+         │
+         ▼
+    Gateway (/api/sync/*)
+         │
+         ▼
+    Sync Service ────────────► vnstock API
+         │                         │
+         ▼                         │
+    PostgreSQL ◄───────────────────┘
+         │
+         ▼
+    Redis (cache update)
+```
 
-### DCF Analysis Flow (with Redis)
-1. **User** clicks "Chạy DCF" → Frontend
-2. **Frontend** → Gateway `/api/stocks/{ticker}/run`
-3. **Gateway** → DCF Service `/analyze/{ticker}`
-4. **DCF Service**:
-   - Sets status in Redis (`analysis:{ticker}`)
-   - Updates Redis at progress milestones (5%, 15%, 50%, 70%, 85%, 95%, 100%)
-   - Saves results to file
-   - Deletes Redis status on completion
-5. **Frontend** polls Stock Service `/api/stocks/{ticker}/status`
-6. **Stock Service** reads from Redis and returns status
-7. **Frontend** displays progress bar
+### Stock Info Flow
+```
+User opens Stock Info page
+         │
+         ▼
+    Gateway (/api/database/stocks/{ticker})
+         │
+         ▼
+    Database Service (read-only)
+         │
+         ▼
+    PostgreSQL
+         │
+         ▼
+    Return comprehensive stock info
+```
 
-## Service Discovery
+### DCF Analysis Flow
+```
+User clicks "Run DCF"
+         │
+         ▼
+    Gateway (/api/stocks/{ticker}/run)
+         │
+         ▼
+    DCF Service
+         │
+         ├──► Update Redis status
+         ├──► Read from PostgreSQL/Redis
+         ├──► Calculate DCF & Graham
+         └──► Save results
+```
 
-Services communicate qua Docker network sử dụng service names:
-- `gateway` → `http://gateway:8000`
-- `dcf` → `http://dcf:8001`
-- `stock` → `http://stock:8002`
-- `frontend` → `http://frontend:80`
-- `redis` → `redis:6379` (Redis connection)
-
-## Docker Compose
+## Docker Compose Services
 
 ```yaml
 services:
-  redis:      # Redis Cache Service
-  gateway:    # API Gateway
-  dcf:        # DCF Analysis Service
-  stock:      # Stock Data Service
-  frontend:   # Frontend (Nginx)
-  base:       # Base Image (build-only)
+  redis:          # Cache Service
+  postgres:       # Database
+  gateway:        # API Gateway
+  dcf:            # DCF Analysis
+  stock:          # Stock Info
+  database:       # Data Viewing (read-only)
+  sync-service:   # Data Sync (write)
+  frontend:       # Nginx Static Files
 ```
 
-All services trong cùng network: `dcf-network`
+### Service Dependencies
+```
+postgres ◄─── database, sync-service, dcf, stock, gateway
+redis    ◄─── dcf, stock, sync-service, gateway
+database ◄─── gateway
+sync-service ◄─── gateway
+dcf, stock ◄─── gateway
+gateway  ◄─── frontend
+```
 
-### Dependencies
-- `gateway` depends_on: `redis`, `dcf`, `stock`
-- `dcf` depends_on: `redis`
-- `stock` depends_on: `redis`
+## Ports Summary
 
-## Volumes
-
-Shared volumes cho data persistence:
-- `./data` → `/app/data` (results, cache)
-- `./config` → `/app/config` (config files)
-- `./log` → `/app/log` (logs)
+| Service | Container Port | Host Port | URL |
+|---------|---------------|-----------|-----|
+| Frontend | 80 | 8081 | http://localhost:8081 |
+| Gateway | 8000 | 8000 | https://localhost:8000 |
+| DCF | 8001 | 8001 | http://localhost:8001 |
+| Stock | 8002 | 8002 | http://localhost:8002 |
+| Database | 8003 | 8003 | http://localhost:8003 |
+| Sync Service | 8004 | 8004 | http://localhost:8004 |
+| PostgreSQL | 5432 | 5433 | localhost:5433 |
+| Redis | 6379 | 6379 | localhost:6379 |
 
 ## Health Checks
 
@@ -180,112 +258,39 @@ Mỗi service có health check endpoint:
 - Gateway: `/health` (checks all services)
 - DCF: `/health`
 - Stock: `/health`
+- Database: `/health`
+- Sync Service: `/health`
 - Frontend: `/health` (nginx)
-- Redis: `redis-cli ping` (Docker healthcheck)
-
-## Benefits
-
-1. **Separation of Concerns**: Mỗi service có trách nhiệm riêng
-2. **Scalability**: Có thể scale từng service độc lập
-3. **Maintainability**: Dễ maintain và update từng service
-4. **Technology Flexibility**: Có thể dùng công nghệ khác nhau cho mỗi service
-5. **Fault Isolation**: Lỗi ở một service không ảnh hưởng service khác
+- Redis: `redis-cli ping`
 
 ## Development
 
-### Local Development (không Docker)
-
+### Start All Services
 ```bash
-# Gateway
-cd services/gateway
-uvicorn main:app --host 0.0.0.0 --port 8000
-
-# DCF Service
-cd services/dcf
-uvicorn main:app --host 0.0.0.0 --port 8001
-
-# Stock Service
-cd services/stock
-uvicorn main:app --host 0.0.0.0 --port 8002
-```
-
-### Docker Development
-
-```bash
-# Build base image first
-make docker-build-base
-
-# Build all services
-make docker-build
-
-# Start all services
 make docker-up
-
-# Development mode (hot reload)
-make docker-dev
-
-# View logs
-make docker-logs-gateway
-make docker-logs-dcf
-make docker-logs-stock
-make docker-logs-redis
 ```
 
-## Scaling
-
-Scale từng service độc lập:
-
+### Rebuild Services
 ```bash
-# Scale DCF service to 3 instances
-docker-compose up -d --scale dcf=3
-
-# Scale Stock service to 2 instances
-docker-compose up -d --scale stock=2
+make docker-rebuild
 ```
 
-## Monitoring
+### View Logs
+```bash
+make docker-logs
+```
 
-Có thể tích hợp với:
-- Prometheus (metrics)
-- Grafana (visualization)
-- ELK Stack (logging)
-- Jaeger (tracing)
+### Stop Services
+```bash
+make docker-down
+```
 
 ## API Documentation
 
-Gateway tự động generate API docs:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## Redis Integration
-
-### Status Tracking
-- **Key Format**: `analysis:{TICKER}` (e.g., `analysis:FPT`)
-- **Data Structure**: JSON với fields:
-  - `ticker`: Stock ticker
-  - `status`: `running`, `completed`, `failed`
-  - `progress`: Progress message
-  - `progress_percent`: 0-100
-  - `started_at`: ISO timestamp
-- **TTL**: 3600 seconds (1 hour)
-
-### Progress Milestones
-- 5%: Initializing calculation...
-- 15%: Fetching financial data...
-- 50%: Calculating DCF valuation...
-- 70%: Calculating Graham valuation...
-- 85%: Generating advanced analysis...
-- 95%: Saving results...
-- 100%: Analysis completed!
-
-### Fallback Mode
-Nếu Redis không available, services sẽ chạy ở fallback mode:
-- Status tracking không hoạt động
-- Services vẫn hoạt động bình thường
-- Logs sẽ ghi warning về Redis connection
+- **Swagger UI**: https://localhost:8000/docs
+- **ReDoc**: https://localhost:8000/redoc
 
 ---
 
-**Version:** 2.0 (Microservices Architecture với Redis)  
-**Last Updated:** 2025-12-29
-
+**Version:** 3.0 (Refactored Architecture với Sync Service)  
+**Last Updated:** 2025-12-30

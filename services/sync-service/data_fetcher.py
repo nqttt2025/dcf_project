@@ -1,5 +1,8 @@
 """
-Sync Service - Fetch and sync data from external sources
+Data Fetcher - Fetch and sync data from external sources (vnstock)
+
+This module contains functions to fetch stock data from vnstock API and save to database.
+Used directly by sync-service for all data synchronization operations.
 """
 import sys
 from pathlib import Path
@@ -21,7 +24,7 @@ import logging
 # Setup logger
 try:
     from src.utils.service_logger import setup_service_logger
-    logger = setup_service_logger('database', level=logging.INFO)
+    logger = setup_service_logger('sync-service', level=logging.INFO)
 except Exception:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)

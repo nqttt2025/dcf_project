@@ -1,3 +1,4 @@
 # Additional requirements for sync service
 apscheduler==3.10.4
-
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
