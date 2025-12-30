@@ -13,10 +13,10 @@ else:
 sys.path.insert(0, str(project_root))
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 import httpx
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import logging
 from collections import defaultdict
@@ -84,6 +84,7 @@ service_urls = get_service_urls()
 DCF_SERVICE_URL = service_urls["dcf"]
 STOCK_SERVICE_URL = service_urls["stock"]
 DATABASE_SERVICE_URL = service_urls["database"]
+SYNC_SERVICE_URL = service_urls.get("sync", "http://sync-service:8004")
 
 # Shared HTTP client with connection pooling
 _http_client: Optional[httpx.AsyncClient] = None
@@ -158,9 +159,9 @@ async def make_service_request(
                 
                 # Make request
                 if method.upper() == "GET":
-                    response = await client.get(url, timeout=timeout)
+                    response = await client.get(url, timeout=timeout, follow_redirects=True)
                 elif method.upper() == "POST":
-                    response = await client.post(url, json=json_data, timeout=timeout)
+                    response = await client.post(url, json=json_data, timeout=timeout, follow_redirects=True)
                 else:
                     raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
                 
@@ -256,6 +257,7 @@ async def get_health_status():
         "dcf": await check_service_health(DCF_SERVICE_URL),
         "stock": await check_service_health(STOCK_SERVICE_URL),
         "database": await check_service_health(DATABASE_SERVICE_URL),
+        "sync-service": await check_service_health(SYNC_SERVICE_URL),
     }
     
     # Check database connection directly
@@ -284,6 +286,67 @@ async def api_health_check():
 async def list_stocks():
     """Lấy danh sách tất cả cổ phiếu"""
     return await make_service_request(STOCK_SERVICE_URL, "GET", "/stocks", timeout=30.0, max_retries=2)
+
+@app.get("/api/stocks/stream")
+async def stream_stocks():
+    """SSE endpoint for real-time stock updates"""
+    async def event_generator():
+        last_data_hash = None
+        consecutive_no_change = 0
+        
+        while True:
+            try:
+                # Fetch latest stocks data
+                stocks_data = await make_service_request(
+                    STOCK_SERVICE_URL, 
+                    "GET", 
+                    "/stocks", 
+                    timeout=10.0, 
+                    max_retries=1
+                )
+                
+                # Create hash to detect changes
+                stocks_hash = json.dumps([
+                    {
+                        'ticker': s.get('ticker'),
+                        'current_price': s.get('current_price'),
+                        'is_running': s.get('is_running'),
+                        'has_result': s.get('has_result')
+                    }
+                    for s in stocks_data.get('stocks', [])
+                ], sort_keys=True)
+                
+                # Only send if data changed
+                data_changed = stocks_hash != last_data_hash
+                if data_changed:
+                    last_data_hash = stocks_hash
+                    consecutive_no_change = 0
+                    yield f"data: {json.dumps(stocks_data)}\n\n"
+                    # Fast interval when changes detected
+                    await asyncio.sleep(5)
+                else:
+                    consecutive_no_change += 1
+                    # Send heartbeat every 30 seconds even if no change
+                    if consecutive_no_change >= 6:  # 6 * 5s = 30s
+                        yield f": heartbeat\n\n"
+                        consecutive_no_change = 0
+                    # Slower interval when stable
+                    await asyncio.sleep(10)
+                
+            except Exception as e:
+                logger.error(f"Error in SSE stream: {e}")
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                await asyncio.sleep(5)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 @app.get("/api/stocks/{ticker}")
 async def get_stock_detail(ticker: str):
@@ -419,8 +482,13 @@ async def trigger_scheduled_job(job_id: str):
 async def sync_current_price(ticker: Optional[str] = Query(None)):
     """Sync current stock price"""
     url = f"/api/database/sync/current-price"
+    params = {}
     if ticker:
-        url += f"?ticker={ticker}"
+        params['ticker'] = ticker
+    # Build URL with query params
+    if params:
+        from urllib.parse import urlencode
+        url += f"?{urlencode(params)}"
     return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
 
 @app.post("/api/database/sync/base-pe")
@@ -436,6 +504,43 @@ async def get_stock_info(ticker: str):
     """Get comprehensive stock information from database"""
     return await make_service_request(DATABASE_SERVICE_URL, "GET", f"/api/database/stocks/{ticker}", timeout=30.0)
 
+# ============================================================================
+# Sync Service Routes - Forward requests to Data Sync Service
+# ============================================================================
+
+@app.get("/api/sync/jobs")
+async def list_sync_jobs():
+    """List all sync jobs"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", "/api/jobs", timeout=10.0)
+
+@app.get("/api/sync/jobs/{job_id}")
+async def get_sync_job(job_id: str):
+    """Get sync job details"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", f"/api/jobs/{job_id}", timeout=10.0)
+
+@app.post("/api/sync/jobs")
+async def create_sync_job(job: dict):
+    """Create a new sync job"""
+    return await make_service_request(SYNC_SERVICE_URL, "POST", "/api/jobs", timeout=10.0, json_data=job)
+
+@app.post("/api/sync/jobs/{job_id}/run")
+async def run_sync_job(job_id: str):
+    """Run a sync job"""
+    return await make_service_request(SYNC_SERVICE_URL, "POST", f"/api/jobs/{job_id}/run", timeout=30.0)
+
+@app.post("/api/sync/jobs/{job_id}/stop")
+async def stop_sync_job(job_id: str, execution_id: Optional[str] = Query(None)):
+    """Stop a running sync job"""
+    url = f"/api/jobs/{job_id}/stop"
+    if execution_id:
+        url += f"?execution_id={execution_id}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=10.0)
+
+@app.get("/api/sync/jobs/{job_id}/executions/{execution_id}")
+async def get_sync_execution(job_id: str, execution_id: str):
+    """Get sync execution details"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", f"/api/jobs/{job_id}/executions/{execution_id}", timeout=10.0)
+
 # ==================== Logs Routes ====================
 
 # Service container name mapping
@@ -444,6 +549,7 @@ SERVICE_CONTAINERS = {
     "dcf": "dcf-service",
     "stock": "dcf-stock",
     "database": "dcf-database",
+    "sync-service": "dcf-sync-service",
     "frontend": "dcf-frontend",
     "postgres": "dcf-postgres",
     "redis": "dcf-redis"
@@ -675,7 +781,7 @@ async def get_logs(
                     }
         
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "service": service,
             "lines": lines,
             "logs": result
@@ -828,7 +934,7 @@ async def get_monitoring_data():
             analyses_list = analyses_dict
         
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "health": health_data,
             "services": {
                 "dcf": {

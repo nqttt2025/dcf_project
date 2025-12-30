@@ -1,0 +1,3 @@
+# Additional requirements for sync service
+apscheduler==3.10.4
+

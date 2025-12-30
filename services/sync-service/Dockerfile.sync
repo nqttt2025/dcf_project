@@ -1,0 +1,32 @@
+# Data Sync Service Dockerfile
+# Use base image with common dependencies
+# Base image must be built first: docker-compose build base
+# Build argument for base image version
+ARG BASE_VERSION=latest
+FROM dcf-project-base:${BASE_VERSION}
+
+# Build argument for version
+ARG VERSION=latest
+ENV APP_VERSION=${VERSION}
+
+WORKDIR /app
+
+# Copy common services utilities (required for imports)
+COPY services/common /app/services/common
+
+# Copy project source code
+COPY src /app/src
+
+# Copy service code
+COPY services/sync-service/main.py /app/main.py
+
+# Create necessary directories
+RUN mkdir -p /app/logs/app /app/logs/docker
+
+LABEL version="${VERSION}"
+LABEL maintainer="DCF Project"
+
+EXPOSE 8004
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]
+

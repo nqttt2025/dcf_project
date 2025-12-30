@@ -1057,7 +1057,7 @@
                 updateHealthTab(gatewayData, databaseData);
 
                 timestampEl.innerHTML = `
-                    <strong>Last updated:</strong> ${new Date().toLocaleString('vi-VN')}<br>
+                    <strong>Last updated:</strong> ${formatTimestampGMT7(new Date().toISOString())}<br>
                     <span style="font-size: 0.85em;">Total response time: ${healthData.totalResponseTime}ms</span>
                 `;
             } catch (error) {
@@ -1134,7 +1134,7 @@
             
             const gatewayInfo = gatewayData.service || 'gateway';
             const gatewayVersion = gatewayData.version || 'N/A';
-            const gatewayTimestamp = gatewayData.timestamp ? new Date(gatewayData.timestamp).toLocaleString('vi-VN') : 'N/A';
+            const gatewayTimestamp = gatewayData.timestamp ? formatTimestampGMT7(gatewayData.timestamp) : 'N/A';
             
             // Database info
             const dcfService = gatewayData.services?.dcf?.data || {};
@@ -1157,6 +1157,7 @@
             const dcfStatus = services.dcf?.status || 'unknown';
             const stockStatus = services.stock?.status || 'unknown';
             const databaseStatus = services.database?.status || 'unknown';
+            const syncServiceStatus = services['sync-service']?.status || services.sync?.status || 'unknown';
             
             generalInfoContent.innerHTML = `
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
@@ -1263,6 +1264,12 @@
                                 <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Database Service:</span>
                                 <span class="status-badge ${databaseStatus === 'healthy' ? 'healthy' : databaseStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
                                     ${databaseStatus.toUpperCase()}
+                                </span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Sync Service:</span>
+                                <span class="status-badge ${syncServiceStatus === 'healthy' ? 'healthy' : syncServiceStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
+                                    ${syncServiceStatus.toUpperCase()}
                                 </span>
                             </div>
                         </div>
@@ -1402,6 +1409,11 @@
                     title: 'Database Service',
                     value: services.database?.status || 'unknown',
                     status: services.database?.status || 'unknown'
+                },
+                {
+                    title: 'Sync Service',
+                    value: services['sync-service']?.status || services.sync?.status || 'unknown',
+                    status: services['sync-service']?.status || services.sync?.status || 'unknown'
                 }
             ];
 
@@ -1624,10 +1636,84 @@
             });
         }
 
+        // Convert GMT timestamp to GMT+7 (Ho Chi Minh City time) and format for display
+        function formatTimestampGMT7(timestamp) {
+            if (!timestamp) return 'N/A';
+            
+            try {
+                let date;
+                if (typeof timestamp === 'string') {
+                    if (timestamp.includes('UTC')) {
+                        const cleanTimestamp = timestamp.replace(' UTC', '');
+                        date = new Date(cleanTimestamp + 'Z');
+                    } else if (timestamp.includes('T') || timestamp.includes('Z') || timestamp.includes('+')) {
+                        date = new Date(timestamp);
+                    } else {
+                        date = new Date(timestamp);
+                    }
+                } else {
+                    date = new Date(timestamp);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return 'Invalid date';
+                }
+                
+                const gmt7Offset = 7 * 60;
+                const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+                const gmt7Time = new Date(utcTime + (gmt7Offset * 60000));
+                
+                return gmt7Time.toLocaleString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) + ' GMT+7';
+            } catch (error) {
+                console.error('Error formatting timestamp:', error, timestamp);
+                return 'Invalid date';
+            }
+        }
+        
         function formatTimestamp(timestamp) {
             if (!timestamp) return 'N/A';
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString('vi-VN');
+            try {
+                let date;
+                if (typeof timestamp === 'string') {
+                    if (timestamp.includes('UTC')) {
+                        const cleanTimestamp = timestamp.replace(' UTC', '');
+                        date = new Date(cleanTimestamp + 'Z');
+                    } else if (timestamp.includes('T') || timestamp.includes('Z') || timestamp.includes('+')) {
+                        date = new Date(timestamp);
+                    } else {
+                        date = new Date(timestamp);
+                    }
+                } else {
+                    date = new Date(timestamp);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return 'N/A';
+                }
+                
+                const gmt7Offset = 7 * 60;
+                const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+                const gmt7Time = new Date(utcTime + (gmt7Offset * 60000));
+                
+                return gmt7Time.toLocaleTimeString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) + ' GMT+7';
+            } catch (error) {
+                return 'N/A';
+            }
         }
 
         function getArchitectureData() {
@@ -1650,14 +1736,16 @@
                             type: 'fastapi',
                             port: '8000',
                             description: 'API Gateway - Routes requests to microservices (HTTPS)',
-                            dependencies: ['DCF Service', 'Stock Service', 'Database Service'],
+                            dependencies: ['DCF Service', 'Stock Service', 'Database Service', 'Sync Service'],
                             requestPaths: [
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/health' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}/config' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}/status' },
-                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/dcf/analyze/{ticker}' }
+                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/dcf/analyze/{ticker}' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/sync/jobs' },
+                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/sync/jobs/{job_id}/run' }
                             ]
                         },
                         {
@@ -1698,8 +1786,27 @@
                             requestPaths: [
                                 { path: 'Gateway → Database Service', method: 'GET', endpoint: '/sync' },
                                 { path: 'Gateway → Database Service', method: 'POST', endpoint: '/migrate' },
+                                { path: 'Sync Service → Database Service', method: 'POST', endpoint: '/api/database/sync/*' },
                                 { path: 'Database Service → PostgreSQL', method: 'SQL', endpoint: 'Database operations' },
                                 { path: 'Database Service → Redis', method: 'SET/GET', endpoint: 'Cache operations' }
+                            ]
+                        },
+                        {
+                            name: 'Sync Service',
+                            type: 'fastapi',
+                            port: '8004',
+                            description: 'Handles data synchronization jobs (current_price, market_data, financial_data, shares_outstanding, base_pe)',
+                            dependencies: ['Database Service', 'PostgreSQL', 'Redis'],
+                            requestPaths: [
+                                { path: 'Gateway → Sync Service', method: 'GET', endpoint: '/api/jobs' },
+                                { path: 'Gateway → Sync Service', method: 'GET', endpoint: '/api/jobs/{job_id}' },
+                                { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/jobs' },
+                                { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/jobs/{job_id}/run' },
+                                { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/jobs/{job_id}/stop' },
+                                { path: 'Gateway → Sync Service', method: 'GET', endpoint: '/api/jobs/{job_id}/executions/{execution_id}' },
+                                { path: 'Sync Service → Database Service', method: 'POST', endpoint: '/api/database/sync/*' },
+                                { path: 'Sync Service → PostgreSQL', method: 'SQL', endpoint: 'Read operations' },
+                                { path: 'Sync Service → Redis', method: 'SET/GET', endpoint: 'Cache update operations' }
                             ]
                         },
                         {
@@ -1711,7 +1818,8 @@
                             requestPaths: [
                                 { path: 'DCF Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' },
                                 { path: 'Stock Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' },
-                                { path: 'Database Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' }
+                                { path: 'Database Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' },
+                                { path: 'Sync Service → PostgreSQL', method: 'SQL', endpoint: 'Read operations' }
                             ]
                         },
                         {
@@ -1723,7 +1831,8 @@
                             requestPaths: [
                                 { path: 'DCF Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
                                 { path: 'Stock Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
-                                { path: 'Database Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' }
+                                { path: 'Database Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
+                                { path: 'Sync Service → Redis', method: 'Redis', endpoint: 'SET/GET (Cache updates)' }
                             ]
                         }
                     ],
@@ -1740,7 +1849,9 @@
                                 'Frontend → Gateway: GET /api/stocks/{ticker}',
                                 'Frontend → Gateway: GET /api/stocks/{ticker}/config',
                                 'Frontend → Gateway: GET /api/stocks/{ticker}/status',
-                                'Frontend → Gateway: POST /api/dcf/analyze/{ticker}'
+                                'Frontend → Gateway: POST /api/dcf/analyze/{ticker}',
+                                'Frontend → Gateway: GET /api/sync/jobs',
+                                'Frontend → Gateway: POST /api/sync/jobs/{job_id}/run'
                             ]
                         },
                         {
@@ -1777,6 +1888,56 @@
                             requestPaths: [
                                 'Gateway → Database Service: GET /sync',
                                 'Gateway → Database Service: POST /migrate'
+                            ]
+                        },
+                        {
+                            id: 'gateway-sync',
+                            from: 'Gateway',
+                            to: 'Sync Service',
+                            protocol: 'HTTP',
+                            endpoints: ['/api/jobs', '/api/jobs/{job_id}', '/api/jobs/{job_id}/run', '/api/jobs/{job_id}/stop', '/api/jobs/{job_id}/executions/{execution_id}'],
+                            requestPaths: [
+                                'Gateway → Sync Service: GET /api/jobs',
+                                'Gateway → Sync Service: GET /api/jobs/{job_id}',
+                                'Gateway → Sync Service: POST /api/jobs',
+                                'Gateway → Sync Service: POST /api/jobs/{job_id}/run',
+                                'Gateway → Sync Service: POST /api/jobs/{job_id}/stop',
+                                'Gateway → Sync Service: GET /api/jobs/{job_id}/executions/{execution_id}'
+                            ]
+                        },
+                        {
+                            id: 'sync-database',
+                            from: 'Sync Service',
+                            to: 'Database Service',
+                            protocol: 'HTTP',
+                            endpoints: ['/api/database/sync/current-price', '/api/database/sync/market_data', '/api/database/sync/financial_data', '/api/database/sync/shares_outstanding', '/api/database/sync/base-pe'],
+                            requestPaths: [
+                                'Sync Service → Database Service: POST /api/database/sync/current-price',
+                                'Sync Service → Database Service: POST /api/database/sync/market_data',
+                                'Sync Service → Database Service: POST /api/database/sync/financial_data',
+                                'Sync Service → Database Service: POST /api/database/sync/shares_outstanding',
+                                'Sync Service → Database Service: POST /api/database/sync/base-pe'
+                            ]
+                        },
+                        {
+                            id: 'sync-postgres',
+                            from: 'Sync Service',
+                            to: 'PostgreSQL',
+                            protocol: 'PostgreSQL',
+                            endpoints: ['Read operations'],
+                            requestPaths: [
+                                'Sync Service → PostgreSQL: SQL SELECT'
+                            ]
+                        },
+                        {
+                            id: 'sync-redis',
+                            from: 'Sync Service',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Cache update operations'],
+                            requestPaths: [
+                                'Sync Service → Redis: SET cache (market_data, financial_data, shares, stock_info)',
+                                'Sync Service → Redis: GET cache'
                             ]
                         },
                         {
@@ -1864,7 +2025,8 @@
                 services: {
                     dcf: { status: 'unknown', running_analyses: 0, analyses: [] },
                     stock: { status: 'unknown' },
-                    database: { status: 'unknown' }
+                    database: { status: 'unknown' },
+                    'sync-service': { status: 'unknown', jobs: [], running_jobs: 0 }
                 }
             };
         }
@@ -1890,6 +2052,17 @@
                 activeConnections.add('stock-postgres');
                 activeConnections.add('stock-redis');
             }
+            
+            // Check for running sync jobs
+            const syncService = monitoringData.services?.['sync-service'] || monitoringData.services?.sync;
+            if (syncService?.running_jobs > 0 || syncService?.jobs?.some(job => job.status === 'running')) {
+                activeConnections.add('frontend-gateway');
+                activeConnections.add('gateway-sync');
+                activeConnections.add('sync-database');
+                activeConnections.add('sync-postgres');
+                activeConnections.add('sync-redis');
+            }
+            
             const legendEl = document.getElementById('legend');
             
             const serviceGroups = {
@@ -2443,7 +2616,7 @@
                     ${healthData.timestamp ? `
                     <div class="service-detail-item">
                         <span class="service-detail-label">Last Check:</span>
-                        <span class="service-detail-value">${new Date(healthData.timestamp).toLocaleString()}</span>
+                        <span class="service-detail-value">${formatTimestampGMT7(healthData.timestamp)}</span>
                     </div>
                     ` : ''}
                     ${healthData.data ? `
@@ -2567,8 +2740,8 @@
                             </div>
                         </div>
                         <div class="request-details">
-                            ${analysis.started_at ? `<p><strong>Started:</strong> ${new Date(analysis.started_at).toLocaleString('vi-VN')}</p>` : ''}
-                            ${analysis.completed_at ? `<p><strong>Completed:</strong> ${new Date(analysis.completed_at).toLocaleString('vi-VN')}</p>` : ''}
+                            ${analysis.started_at ? `<p><strong>Started:</strong> ${formatTimestampGMT7(analysis.started_at)}</p>` : ''}
+                            ${analysis.completed_at ? `<p><strong>Completed:</strong> ${formatTimestampGMT7(analysis.completed_at)}</p>` : ''}
                             ${analysis.error ? `<p style="color: #ef4444;"><strong>Error:</strong> ${analysis.error}</p>` : ''}
                         </div>
                     </div>

@@ -155,5 +155,6 @@ def get_service_urls() -> Dict[str, str]:
         "dcf": os.getenv("DCF_SERVICE_URL", "http://dcf:8001"),
         "stock": os.getenv("STOCK_SERVICE_URL", "http://stock:8002"),
         "database": os.getenv("DATABASE_SERVICE_URL", "http://database:8003"),
+        "sync": os.getenv("SYNC_SERVICE_URL", "http://sync-service:8004"),
     }
 

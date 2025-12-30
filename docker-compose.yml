@@ -79,6 +79,7 @@ services:
       - DCF_SERVICE_URL=http://dcf:8001
       - STOCK_SERVICE_URL=http://stock:8002
       - DATABASE_SERVICE_URL=http://database:8003
+      - SYNC_SERVICE_URL=http://sync-service:8004
       - DATABASE_URL=postgresql://dcf_user:dcf_password@postgres:5432/dcf_db
       - REDIS_URL=redis://redis:6379/0
       - APP_VERSION=${VERSION:-latest}
@@ -88,6 +89,7 @@ services:
       - dcf
       - stock
       - database
+      - sync-service
     volumes:
       - ./config/ssl:/app/ssl:ro
     networks:
@@ -199,6 +201,44 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Data Sync Service - Handles data synchronization jobs
+  sync-service:
+    build:
+      context: .
+      dockerfile: services/sync-service/Dockerfile.sync
+      args:
+        - BASE_VERSION=${BASE_VERSION:-latest}
+        - VERSION=${VERSION:-latest}
+    image: dcf-project-sync-service:${VERSION:-latest}
+    container_name: dcf-sync-service
+    ports:
+      - "8004:8004"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=dcf_user
+      - POSTGRES_PASSWORD=dcf_password
+      - POSTGRES_DB=dcf_db
+      - DATABASE_SERVICE_URL=http://database:8003
+      - REDIS_URL=redis://redis:6379/0
+      - APP_VERSION=${VERSION:-latest}
+    depends_on:
+      - redis
+      - postgres
+      - database
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - dcf-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8004/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

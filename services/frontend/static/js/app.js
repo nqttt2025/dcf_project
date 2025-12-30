@@ -24,12 +24,123 @@ function formatPercent(num) {
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
 }
 
-// Load stocks from API
+// Convert GMT timestamp to GMT+7 (Ho Chi Minh City time) and format for display
+function formatTimestampGMT7(timestamp) {
+    if (!timestamp) return 'N/A';
+    
+    try {
+        // Parse the timestamp - handle various formats
+        let date;
+        if (typeof timestamp === 'string') {
+            // Handle UTC format strings like "2024-01-01 12:00:00 UTC" or ISO format
+            if (timestamp.includes('UTC')) {
+                // Remove " UTC" suffix and parse
+                const cleanTimestamp = timestamp.replace(' UTC', '');
+                date = new Date(cleanTimestamp + 'Z'); // Add Z to indicate UTC
+            } else if (timestamp.includes('T') || timestamp.includes('Z') || timestamp.includes('+')) {
+                // ISO format
+                date = new Date(timestamp);
+            } else {
+                // Try parsing as is
+                date = new Date(timestamp);
+            }
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+            return 'Invalid date';
+        }
+        
+        // Convert to GMT+7 (HCM timezone)
+        // Create a date in GMT+7 timezone
+        const gmt7Offset = 7 * 60; // 7 hours in minutes
+        const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+        const gmt7Time = new Date(utcTime + (gmt7Offset * 60000));
+        
+        // Format as Vietnamese locale with GMT+7 timezone
+        return gmt7Time.toLocaleString('vi-VN', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        }) + ' GMT+7';
+    } catch (error) {
+        console.error('Error formatting timestamp:', error, timestamp);
+        return 'Invalid date';
+    }
+}
+
+// Format timestamp for display (short format, no seconds)
+function formatTimestampShort(timestamp) {
+    if (!timestamp) return 'N/A';
+    
+    try {
+        let date;
+        if (typeof timestamp === 'string') {
+            if (timestamp.includes('UTC')) {
+                const cleanTimestamp = timestamp.replace(' UTC', '');
+                date = new Date(cleanTimestamp + 'Z');
+            } else if (timestamp.includes('T') || timestamp.includes('Z') || timestamp.includes('+')) {
+                date = new Date(timestamp);
+            } else {
+                date = new Date(timestamp);
+            }
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'Invalid date';
+        }
+        
+        const gmt7Offset = 7 * 60;
+        const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+        const gmt7Time = new Date(utcTime + (gmt7Offset * 60000));
+        
+        return gmt7Time.toLocaleString('vi-VN', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }) + ' GMT+7';
+    } catch (error) {
+        console.error('Error formatting timestamp:', error, timestamp);
+        return 'Invalid date';
+    }
+}
+
+// Real-time updates state
+let eventSource = null;
+let pollTimeout = null;
+let lastDataHash = null;
+let pollInterval = 5000; // Start with 5s, will adapt
+let lastUpdateTime = Date.now();
+let sseSupported = true;
+
+// Load stocks from API (used by both SSE and polling)
 async function loadStocks() {
     try {
         const response = await fetch('/api/stocks');
         const data = await response.json();
         
+        // Create hash to detect changes
+        const dataHash = JSON.stringify(data.stocks.map(s => ({
+            ticker: s.ticker,
+            current_price: s.current_price,
+            is_running: s.is_running,
+            has_result: s.has_result
+        })));
+        
+        // Update stocks
         allStocks = data.stocks;
         filteredStocks = [...allStocks];
         
@@ -39,10 +150,115 @@ async function loadStocks() {
         document.getElementById('running-stocks').textContent = data.running;
         
         renderStocks();
+        
+        // Smart polling: adapt interval based on changes
+        if (dataHash !== lastDataHash) {
+            // Data changed - use faster polling
+            pollInterval = 5000;
+            lastUpdateTime = Date.now();
+            lastDataHash = dataHash;
+        } else {
+            // No changes - gradually increase interval
+            const timeSinceUpdate = Date.now() - lastUpdateTime;
+            if (timeSinceUpdate > 60000) {
+                pollInterval = Math.min(pollInterval * 1.2, 30000); // Max 30s
+            }
+        }
+        
+        return data;
     } catch (error) {
         console.error('Error loading stocks:', error);
         document.getElementById('stocks-grid').innerHTML = 
             '<div class="loading">❌ Lỗi khi tải dữ liệu. Vui lòng thử lại.</div>';
+        throw error;
+    }
+}
+
+// Initialize SSE connection for real-time updates
+function initSSE() {
+    if (!sseSupported || eventSource) {
+        return;
+    }
+    
+    try {
+        eventSource = new EventSource('/api/stocks/stream');
+        
+        eventSource.onmessage = (event) => {
+            if (event.data.startsWith(':')) {
+                // Heartbeat, ignore
+                return;
+            }
+            
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Update stocks
+                allStocks = data.stocks;
+                filteredStocks = [...allStocks];
+                
+                // Update status bar
+                document.getElementById('total-stocks').textContent = data.total;
+                document.getElementById('analyzed-stocks').textContent = data.with_results;
+                document.getElementById('running-stocks').textContent = data.running;
+                
+                renderStocks();
+                
+                // Reset polling interval since we got update via SSE
+                pollInterval = 5000;
+                lastUpdateTime = Date.now();
+            } catch (error) {
+                console.error('Error parsing SSE data:', error);
+            }
+        };
+        
+        eventSource.onerror = (error) => {
+            console.warn('SSE connection error, falling back to polling:', error);
+            sseSupported = false;
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            // Start polling as fallback
+            startSmartPolling();
+        };
+        
+        console.log('SSE connection established for real-time updates');
+    } catch (error) {
+        console.warn('SSE not supported, using polling:', error);
+        sseSupported = false;
+        startSmartPolling();
+    }
+}
+
+// Smart polling with adaptive interval
+function startSmartPolling() {
+    if (pollTimeout) {
+        clearTimeout(pollTimeout);
+    }
+    
+    const poll = async () => {
+        try {
+            await loadStocks();
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+        
+        // Schedule next poll with adaptive interval
+        pollTimeout = setTimeout(poll, pollInterval);
+    };
+    
+    poll();
+}
+
+// Cleanup function
+function cleanupUpdates() {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+    if (pollTimeout) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
     }
 }
 
@@ -199,7 +415,7 @@ function renderStocks() {
                     </div>
                     ${upsideHtml}
                     ${stock.saved_at ? `<div style="margin-top: 10px; font-size: 0.85em; color: #6b7280;">
-                        Cập nhật: ${new Date(stock.saved_at).toLocaleString('vi-VN')}
+                        Cập nhật: ${formatTimestampShort(stock.saved_at)}
                     </div>` : ''}
                 ` : `
                     <div style="text-align: center; padding: 20px; color: #6b7280;">
@@ -542,7 +758,7 @@ async function showDetail(ticker) {
             <div class="section">
                 <div class="detail-item">
                     <div class="detail-label">Ngày phân tích</div>
-                    <div class="detail-value">${new Date(result.saved_at).toLocaleString('vi-VN')}</div>
+                    <div class="detail-value">${formatTimestampGMT7(result.saved_at)}</div>
                 </div>
             </div>
             ` : ''}
@@ -622,9 +838,18 @@ window.onclick = function(event) {
     }
 }
 
-// Auto-refresh every 30 seconds
-setInterval(loadStocks, 30000);
+// Initialize real-time updates
+// Try SSE first, fallback to smart polling
+initSSE();
+
+// If SSE not supported or failed, start smart polling
+if (!sseSupported) {
+    startSmartPolling();
+}
 
 // Initial load
 loadStocks();
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', cleanupUpdates);
 

@@ -35,7 +35,7 @@ WEB_DIR="${WEB_DIR:-$PROJECT_ROOT/web}"
 
 # Docker constants
 DOCKER_IMAGE_PREFIX="${DOCKER_IMAGE_PREFIX:-dcf-project}"
-DOCKER_IMAGES="${DOCKER_IMAGES:-gateway dcf stock frontend}"
+DOCKER_IMAGES="${DOCKER_IMAGES:-gateway dcf stock database sync-service frontend}"
 
 # Export constants
 export PROJECT_ROOT

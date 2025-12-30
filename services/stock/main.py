@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 import json
 import os
 import logging
+import asyncio
 
 # Try to import httpx for syncing with DCF service
 try:
@@ -24,7 +25,7 @@ except ImportError:
     HAS_HTTPX = False
 
 # Import common utilities after path setup
-from services.common import create_health_response
+from services.common import create_health_response, get_service_urls
 
 from src.utils.result_manager import get_result_manager
 
@@ -36,6 +37,10 @@ app = FastAPI(title="Stock Service")
 
 # Initialize managers
 result_manager = get_result_manager()
+
+# Get service URLs
+service_urls = get_service_urls()
+DATABASE_SERVICE_URL = service_urls.get("database", "http://database:8003")
 
 # Initialize paths
 config_dir = project_root / 'config'
@@ -105,7 +110,7 @@ def health_check():
     return create_health_response("stock-service", include_database=True)
 
 @app.get("/stocks")
-def list_stocks():
+async def list_stocks():
     """Lấy danh sách tất cả cổ phiếu với trạng thái"""
     # Sync running status with DCF service
     sync_running_status()
@@ -114,6 +119,39 @@ def list_stocks():
     
     # Get all config files
     config_files = sorted(config_dir.glob('*.cfg'))
+    
+    # Fetch prices from database for all tickers in parallel
+    ticker_list = [config_file.stem.upper() for config_file in config_files if config_file.stem.upper() != 'README']
+    price_map = {}
+    
+    if HAS_HTTPX and ticker_list:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Fetch prices for all tickers in parallel
+                tasks = []
+                for ticker in ticker_list:
+                    tasks.append(client.get(f"{DATABASE_SERVICE_URL}/api/database/stocks/{ticker}"))
+                
+                responses = await asyncio.gather(*tasks, return_exceptions=True)
+                for ticker, response in zip(ticker_list, responses):
+                    if isinstance(response, Exception):
+                        logger.warning(f"Could not fetch price from database for {ticker}: {response}")
+                        continue
+                    if response.status_code == 200:
+                        db_data = response.json()
+                        # Try to get current_price from metrics first, then market_data
+                        current_price = db_data.get('metrics', {}).get('current_price')
+                        if current_price is None:
+                            current_price = db_data.get('market_data', {}).get('close_price')
+                        if current_price is None:
+                            current_price = db_data.get('current_price')
+                        if current_price:
+                            price_map[ticker] = current_price
+                            logger.info(f"Fetched price for {ticker} from database: {current_price}")
+                    else:
+                        logger.warning(f"Failed to fetch price for {ticker}: HTTP {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error fetching prices from database: {e}", exc_info=True)
     
     for config_file in config_files:
         ticker = config_file.stem.upper()
@@ -133,6 +171,11 @@ def list_stocks():
             except:
                 pass
         
+        # Use database price if available, otherwise fallback to result file price
+        current_price = price_map.get(ticker) if ticker in price_map else None
+        if current_price is None:
+            current_price = result_data.get('price') if result_data else None
+        
         # Check if running
         is_running = ticker in running_processes
         running_info = running_processes.get(ticker, {})
@@ -143,7 +186,7 @@ def list_stocks():
             'is_running': is_running,
             'progress': running_info.get('progress'),
             'progress_percent': running_info.get('progress_percent', 0),
-            'current_price': result_data.get('price') if result_data else None,
+            'current_price': current_price,
             'dcf_fair_value': result_data.get('dcf_fair_value') if result_data else None,
             'graham_fair_value': result_data.get('graham_fair_value') if result_data else None,
             'average_fair_value': result_data.get('average_fair_value') if result_data else None,
@@ -152,10 +195,9 @@ def list_stocks():
         }
         
         # Calculate upside/downside
-        if result_data and result_data.get('price') and result_data.get('dcf_fair_value'):
-            price = result_data['price']
+        if current_price and result_data and result_data.get('dcf_fair_value'):
             dcf_fv = result_data['dcf_fair_value']
-            upside = ((dcf_fv - price) / price) * 100
+            upside = ((dcf_fv - current_price) / current_price) * 100
             stock_info['upside_downside'] = round(upside, 2)
         
         stocks.append(stock_info)

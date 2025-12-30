@@ -550,6 +550,7 @@
             <nav class="nav-links">
                 <a href="/" class="active">Dashboard</a>
                 <a href="/static/database.html">Database</a>
+                <a href="/static/jobs.html">Job Management</a>
                 <a href="/static/monitoring.html">System Monitoring</a>
                 <a href="/static/stock-info.html">Stock Info</a>
             </nav>
@@ -662,7 +663,22 @@
                         
                         const timestamp = document.createElement('div');
                         timestamp.className = 'last-updated';
-                        timestamp.textContent = `Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
+                        // Format current time as GMT+7
+                        const now = new Date();
+                        const gmt7Offset = 7 * 60;
+                        const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+                        const gmt7Time = new Date(utcTime + (gmt7Offset * 60000));
+                        const formattedTime = gmt7Time.toLocaleString('vi-VN', {
+                            timeZone: 'Asia/Ho_Chi_Minh',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                        }) + ' GMT+7';
+                        timestamp.textContent = `Cập nhật lần cuối: ${formattedTime}`;
                         grid.appendChild(timestamp);
                     } finally {
                         refreshBtn.disabled = false;

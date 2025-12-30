@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 from typing import List, Optional
 import redis
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 
@@ -498,8 +498,9 @@ async def get_stock_info(ticker: str, db: Session = Depends(get_db)):
                 LIMIT 1
             """)
             net_profit_result = db.execute(eps_query, {"stock_id": stock_dict['id']}).fetchone()
-            if net_profit_result and net_profit_result[0] and shares_dict and shares_dict.get('shares'):
-                eps = net_profit_result[0] / shares_dict['shares']
+            shares_outstanding = shares_dict.get('shares_outstanding') if shares_dict else None
+            if net_profit_result and net_profit_result[0] and shares_outstanding:
+                eps = net_profit_result[0] / shares_outstanding
         except Exception as e:
             logger.debug(f"Could not calculate EPS for {ticker}: {e}")
             eps = None
@@ -511,8 +512,9 @@ async def get_stock_info(ticker: str, db: Session = Depends(get_db)):
         
         # Calculate market cap if we have price and shares
         market_cap = None
-        if market_data_dict and market_data_dict.get('close_price') and shares_dict and shares_dict.get('shares'):
-            market_cap = market_data_dict['close_price'] * shares_dict['shares']
+        shares_outstanding = shares_dict.get('shares_outstanding') if shares_dict else None
+        if market_data_dict and market_data_dict.get('close_price') and shares_outstanding:
+            market_cap = market_data_dict['close_price'] * shares_outstanding
         
         return {
             "ticker": ticker,
@@ -526,7 +528,7 @@ async def get_stock_info(ticker: str, db: Session = Depends(get_db)):
                 "pe_ratio": pe_ratio,
                 "eps": eps,
                 "ttm_fcf": financial_dict.get('ttm_fcf') if financial_dict else None,
-                "shares": shares_dict.get('shares') if shares_dict else None
+                "shares": shares_outstanding
             },
             "last_updated": {
                 "market_data": market_data_dict.get('trade_date').isoformat() if market_data_dict and market_data_dict.get('trade_date') else None,
@@ -701,7 +703,7 @@ async def sync_growth_metrics(
         return {
             "message": f"Growth metrics sync completed",
             "summary": results,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
     except HTTPException:
@@ -734,7 +736,7 @@ def perform_sync_sync(
             "ticker": ticker,
             "progress": "Starting sync...",
             "progress_percent": 0.0,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now(timezone.utc).isoformat()
         }
         try:
             if 'HAS_REDIS' in globals() and HAS_REDIS and 'sync_redis_client' in globals() and sync_redis_client and sync_redis_client._client:
@@ -779,7 +781,7 @@ def perform_sync_sync(
         status["status"] = "completed"
         status["progress"] = "Sync completed"
         status["progress_percent"] = 100.0
-        status["completed_at"] = datetime.now().isoformat()
+        status["completed_at"] = datetime.now(timezone.utc).isoformat()
         status["summary"] = results
         
         try:
@@ -798,8 +800,8 @@ def perform_sync_sync(
             "ticker": ticker,
             "progress": f"Error: {str(e)}",
             "progress_percent": 0.0,
-            "started_at": datetime.now().isoformat(),
-            "failed_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
             "error": str(e)
         }
         try:
@@ -848,7 +850,7 @@ async def sync_current_price_endpoint(
         "ticker": ticker,
         "sync_id": sync_id,
         "status": "running",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.post("/api/database/sync/base-pe")
@@ -887,7 +889,7 @@ async def sync_base_pe_endpoint(
         "ticker": ticker,
         "sync_id": sync_id,
         "status": "running",
-        "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -939,7 +941,7 @@ async def sync_table_data(
         "table": table_name,
         "sync_id": sync_id,
         "status": "running",
-        "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.get("/api/database/sync/{table_name}/status")
@@ -974,12 +976,6 @@ async def get_sync_status(
         "message": "No sync status found. Sync may not have started yet."
     }
 
-
-@app.get("/api/database/sync/jobs")
-        raise
-    except Exception as e:
-        logger.error(f"Error getting stock info for {ticker}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error retrieving stock information: {str(e)}")
 
 @app.get("/api/database/sync/jobs")
 async def list_sync_jobs():
@@ -1221,7 +1217,7 @@ async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
         "job_id": job_id,
         "sync_id": sync_id,
         "status": "running",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 def run_scheduled_market_data_sync():
@@ -1240,7 +1236,7 @@ def run_scheduled_market_data_sync():
             "ticker": None,
             "progress": "Starting scheduled sync...",
             "progress_percent": 0.0,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "job_type": "scheduled",
             "days": 7
         }
@@ -1260,7 +1256,7 @@ def run_scheduled_market_data_sync():
         status["status"] = "completed"
         status["progress"] = "Scheduled sync completed"
         status["progress_percent"] = 100.0
-        status["completed_at"] = datetime.now().isoformat()
+        status["completed_at"] = datetime.now(timezone.utc).isoformat()
         status["summary"] = results
         
         try:
@@ -1278,7 +1274,7 @@ def run_scheduled_market_data_sync():
         try:
             status["status"] = "failed"
             status["error"] = str(e)
-            status["failed_at"] = datetime.now().isoformat()
+            status["failed_at"] = datetime.now(timezone.utc).isoformat()
             if HAS_REDIS and sync_redis_client and sync_redis_client._client:
                 import json
                 sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
@@ -1301,7 +1297,7 @@ def run_scheduled_market_data_sync_full():
             "ticker": None,
             "progress": "Starting scheduled full sync...",
             "progress_percent": 0.0,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "job_type": "scheduled_full",
             "days": 30
         }
@@ -1321,7 +1317,7 @@ def run_scheduled_market_data_sync_full():
         status["status"] = "completed"
         status["progress"] = "Scheduled full sync completed"
         status["progress_percent"] = 100.0
-        status["completed_at"] = datetime.now().isoformat()
+        status["completed_at"] = datetime.now(timezone.utc).isoformat()
         status["summary"] = results
         
         try:
@@ -1339,7 +1335,7 @@ def run_scheduled_market_data_sync_full():
         try:
             status["status"] = "failed"
             status["error"] = str(e)
-            status["failed_at"] = datetime.now().isoformat()
+            status["failed_at"] = datetime.now(timezone.utc).isoformat()
             if HAS_REDIS and sync_redis_client and sync_redis_client._client:
                 import json
                 sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
