@@ -449,6 +449,22 @@ def get_shares_outstanding(ticker):
                 # Par value (mệnh giá) of FPT shares is 10,000 VND per share
                 par_value = 10000
                 shares_count = float(shares_capital) / par_value
+                
+                # Validation using shares_validator
+                try:
+                    from src.utils.shares_validator import validate_shares
+                    validate_shares(shares_count, ticker, raise_error=True)
+                except ImportError:
+                    # Fallback validation if validator not available
+                    if shares_count > 1e12:  # More than 1 trillion shares
+                        error_msg = (
+                            f"Shares outstanding too large for {ticker}: {shares_count:,.0f}. "
+                            f"This is likely a unit error. Capital value: {shares_capital:,.0f} VND, "
+                            f"par_value: {par_value}. Please check the calculation logic."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                
                 logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from charter capital {shares_capital:,.0f} VND)")
                 cache_manager.set_with_timestamp(ticker, "shares", shares_count)
                 
@@ -478,6 +494,22 @@ def get_shares_outstanding(ticker):
                     # Par value (mệnh giá) is typically 10,000 VND per share
                     par_value = 10000
                     shares_count = float(capital_value) / par_value
+                    
+                    # Validation using shares_validator
+                    try:
+                        from src.utils.shares_validator import validate_shares
+                        validate_shares(shares_count, ticker, raise_error=True)
+                    except ImportError:
+                        # Fallback validation if validator not available
+                        if shares_count > 1e12:  # More than 1 trillion shares
+                            error_msg = (
+                                f"Shares outstanding too large for {ticker}: {shares_count:,.0f}. "
+                                f"This is likely a unit error. Capital value: {capital_value:,.0f} VND, "
+                                f"par_value: {par_value}. Please check the calculation logic."
+                            )
+                            logger.error(error_msg)
+                            raise ValueError(error_msg)
+                    
                     logger.info(f"Fetched shares for {ticker}: {shares_count:,.0f} (from {col_name} {capital_value:,.0f} VND, par_value {par_value:,} VND)")
                 cache_manager.set_with_timestamp(ticker, "shares", shares_count)
                 
@@ -516,6 +548,33 @@ def get_shares_outstanding(ticker):
         # 'Capital and reserves' is total equity, not shares - skip it
 
         logger.warning(f"Could not find shares outstanding in balance sheet data")
+        
+        # Last resort: Calculate from market cap / price
+        try:
+            market_cap, price = get_market_cap(ticker)
+            if market_cap and price and price > 0:
+                shares_from_mc = market_cap / price
+                logger.info(f"Calculated shares from market cap for {ticker}: {shares_from_mc:,.0f} (market_cap={market_cap:,.0f}, price={price:,.0f})")
+                
+                # Validate
+                try:
+                    from src.utils.shares_validator import validate_shares
+                    validate_shares(shares_from_mc, ticker, raise_error=True)
+                except ImportError:
+                    if shares_from_mc > 1e12:
+                        logger.warning(f"Shares from market cap too large for {ticker}, skipping")
+                        raise Exception("Invalid shares from market cap")
+                
+                cache_manager.set_with_timestamp(ticker, "shares", shares_from_mc)
+                if HAS_REDIS and redis_client:
+                    try:
+                        redis_client.cache_shares(ticker, shares_from_mc, calculation_method="market_cap_calculation")
+                    except:
+                        pass
+                return shares_from_mc
+        except Exception as mc_error:
+            logger.debug(f"Could not calculate shares from market cap: {mc_error}")
+        
         raise Exception("Shares outstanding not found in data")
 
     except Exception as e:
@@ -525,6 +584,26 @@ def get_shares_outstanding(ticker):
             shares = cache_manager.get_with_timestamp(ticker, "shares")
             logger.info(f"Using cached shares for {ticker}: {shares}")
             return shares
+        
+        # Last resort: Calculate from market cap / price
+        try:
+            market_cap, price = get_market_cap(ticker)
+            if market_cap and price and price > 0:
+                shares_from_mc = market_cap / price
+                logger.info(f"Calculated shares from market cap (fallback) for {ticker}: {shares_from_mc:,.0f}")
+                
+                # Validate
+                try:
+                    from src.utils.shares_validator import validate_shares
+                    validate_shares(shares_from_mc, ticker, raise_error=False)
+                except ImportError:
+                    pass
+                
+                cache_manager.set_with_timestamp(ticker, "shares", shares_from_mc)
+                return shares_from_mc
+        except Exception as mc_error:
+            logger.debug(f"Could not calculate shares from market cap (fallback): {mc_error}")
+        
         # Use default if cache also fails
         logger.info(f"Using default share outstanding: {default_shares}")
         return default_shares

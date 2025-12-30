@@ -270,6 +270,15 @@ async function showDetail(ticker) {
         const result = data.result;
         const advanced = result.advanced_analysis || {};
         
+        // Build comprehensive detail view
+        const dcfParams = result.dcf_params || {};
+        const grahamParams = result.graham_params || {};
+        const metrics = advanced.valuation_metrics || {};
+        const upside = advanced.upside_downside || {};
+        const forecast = advanced.forecast_details || {};
+        const yearlyPrice = advanced.yearly_price_forecast || [];
+        const peAnalysis = result.pe_analysis || {};
+        
         const modalContent = `
             <div class="modal-header">
                 <h2 class="modal-title">${ticker} - Chi tiết phân tích DCF</h2>
@@ -292,7 +301,7 @@ async function showDetail(ticker) {
                         <div class="detail-value">${formatNumber(result.fcf)} VND</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">Số cổ phiếu</div>
+                        <div class="detail-label">Số cổ phiếu đang lưu hành</div>
                         <div class="detail-value">${formatNumber(result.shares)}</div>
                     </div>
                     <div class="detail-item">
@@ -302,6 +311,18 @@ async function showDetail(ticker) {
                     <div class="detail-item">
                         <div class="detail-label">Tỷ lệ tăng trưởng ước tính</div>
                         <div class="detail-value">${result.growth_estimate.toFixed(2)}%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Thời gian dự báo</div>
+                        <div class="detail-value">${dcfParams.yr || 5} năm</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ lệ chiết khấu</div>
+                        <div class="detail-value">${dcfParams.dr || 10}%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ lệ tăng trưởng vĩnh viễn</div>
+                        <div class="detail-value">${dcfParams.pr || 2.5}%</div>
                     </div>
                 </div>
             </div>
@@ -324,30 +345,205 @@ async function showDetail(ticker) {
                 </div>
             </div>
             
-            ${advanced.upside_downside ? `
+            ${upside.dcf_upside_pct !== undefined ? `
             <div class="section">
-                <h3 class="section-title">Phân tích tiềm năng</h3>
+                <h3 class="section-title">Phân tích tiềm năng tăng/giảm giá</h3>
                 <div class="detail-grid">
                     <div class="detail-item">
-                        <div class="detail-label">DCF Upside/Downside</div>
-                        <div class="detail-value ${advanced.upside_downside.dcf_upside_pct >= 0 ? 'positive' : 'negative'}">
-                            ${formatPercent(advanced.upside_downside.dcf_upside_pct)}
+                        <div class="detail-label">DCF Tiềm năng tăng/giảm</div>
+                        <div class="detail-value ${upside.dcf_upside_pct >= 0 ? 'positive' : 'negative'}">
+                            ${formatPercent(upside.dcf_upside_pct)}
                         </div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">Graham Upside/Downside</div>
-                        <div class="detail-value ${advanced.upside_downside.graham_upside_pct >= 0 ? 'positive' : 'negative'}">
-                            ${formatPercent(advanced.upside_downside.graham_upside_pct)}
+                        <div class="detail-label">Graham Tiềm năng tăng/giảm</div>
+                        <div class="detail-value ${upside.graham_upside_pct >= 0 ? 'positive' : 'negative'}">
+                            ${formatPercent(upside.graham_upside_pct)}
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Trung bình Tiềm năng tăng/giảm</div>
+                        <div class="detail-value ${upside.average_upside_pct >= 0 ? 'positive' : 'negative'}">
+                            ${formatPercent(upside.average_upside_pct)}
                         </div>
                     </div>
                 </div>
             </div>
             ` : ''}
             
+            ${metrics.pe_ratio !== undefined ? `
+            <div class="section">
+                <h3 class="section-title">Chỉ số định giá</h3>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ số P/E (cổ phiếu)</div>
+                        <div class="detail-value">${metrics.pe_ratio.toFixed(2)}</div>
+                    </div>
+                    ${metrics.industry_pe !== undefined && metrics.industry_pe !== null ? `
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ số P/E (ngành)</div>
+                        <div class="detail-value">${metrics.industry_pe.toFixed(2)}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">So sánh P/E</div>
+                        <div class="detail-value ${metrics.pe_ratio <= metrics.industry_pe ? 'positive' : 'negative'}">
+                            ${metrics.pe_ratio <= metrics.industry_pe ? 'Thấp hơn ngành' : 'Cao hơn ngành'}
+                            ${metrics.industry_pe > 0 ? ` (${((metrics.pe_ratio / metrics.industry_pe - 1) * 100).toFixed(1)}%)` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${peAnalysis && peAnalysis.suggested_base_pe ? `
+                    <div class="detail-item">
+                        <div class="detail-label">Base PE đề xuất (Graham)</div>
+                        <div class="detail-value">
+                            ${peAnalysis.suggested_base_pe.toFixed(2)}
+                            ${peAnalysis.industry ? ` <span style="font-size: 0.8em; color: #666;">(${peAnalysis.industry})</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Base PE hiện tại (config)</div>
+                        <div class="detail-value ${Math.abs((grahamParams.base_pe || 8.5) - peAnalysis.suggested_base_pe) > 0.5 ? 'negative' : 'positive'}">
+                            ${grahamParams.base_pe || 8.5}
+                            ${Math.abs((grahamParams.base_pe || 8.5) - peAnalysis.suggested_base_pe) > 0.5 ? 
+                                ` <span style="font-size: 0.8em; color: #ef4444;">(Khác ${((grahamParams.base_pe || 8.5) - peAnalysis.suggested_base_pe).toFixed(2)})</span>` : 
+                                ` <span style="font-size: 0.8em; color: #10b981;">(Phù hợp)</span>`}
+                        </div>
+                    </div>
+                    ` : ''}
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ số P/FCF</div>
+                        <div class="detail-value">${metrics.pfcf_ratio.toFixed(2)}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ suất FCF</div>
+                        <div class="detail-value">${metrics.fcf_yield.toFixed(2)}%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Tỷ suất lợi nhuận</div>
+                        <div class="detail-value">${metrics.earnings_yield.toFixed(2)}%</div>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+            
+            ${forecast.fcf_forecast && forecast.fcf_forecast.length > 0 ? `
+            <div class="section">
+                <h3 class="section-title">Dự báo tăng trưởng FCF theo năm</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Năm</th>
+                                <th>FCF (VND)</th>
+                                <th>Tăng trưởng YoY %</th>
+                                <th>Tăng trưởng tích lũy %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${advanced.yearly_growth ? advanced.yearly_growth.map((growth, idx) => `
+                                <tr>
+                                    <td>Năm ${idx + 1}</td>
+                                    <td>${formatNumber(forecast.fcf_forecast[idx] || 0)}</td>
+                                    <td>${growth[0].toFixed(2)}%</td>
+                                    <td>${growth[1].toFixed(2)}%</td>
+                                </tr>
+                            `).join('') : forecast.fcf_forecast.map((fcf, idx) => `
+                                <tr>
+                                    <td>Năm ${idx + 1}</td>
+                                    <td>${formatNumber(fcf)}</td>
+                                    <td>-</td>
+                                    <td>-</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            ` : ''}
+            
+            ${yearlyPrice && yearlyPrice.length > 0 ? `
+            <div class="section">
+                <h3 class="section-title">Dự báo giá cổ phiếu theo năm</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Năm</th>
+                                <th>FCF (VND)</th>
+                                <th>Giá trị công ty (VND)</th>
+                                <th>Giá/cổ phiếu (VND)</th>
+                                <th>Thay đổi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${yearlyPrice.map(year => `
+                                <tr>
+                                    <td>Năm ${year.year}</td>
+                                    <td>${formatNumber(year.fcf)}</td>
+                                    <td>${formatNumber(year.company_value)}</td>
+                                    <td><strong>${formatCurrency(year.price_per_share)}</strong></td>
+                                    <td class="${year.price_change_pct >= 0 ? 'positive' : 'negative'}">
+                                        ${formatPercent(year.price_change_pct)}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3 class="section-title">Phân tích hiệu suất theo năm</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Năm</th>
+                                <th>Giá (VND)</th>
+                                <th>Tăng trưởng YoY %</th>
+                                <th>So với giá hiện tại</th>
+                                <th>Số lần</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Hiện tại</strong></td>
+                                <td><strong>${formatCurrency(result.price)}</strong></td>
+                                <td>Cơ sở</td>
+                                <td>Cơ sở (100%)</td>
+                                <td>1.00x</td>
+                            </tr>
+                            ${yearlyPrice.map(year => `
+                                <tr>
+                                    <td>Năm ${year.year}</td>
+                                    <td><strong>${formatCurrency(year.price_per_share)}</strong></td>
+                                    <td class="${year.year_over_year_growth_pct >= 0 ? 'positive' : 'negative'}">
+                                        ${formatPercent(year.year_over_year_growth_pct)}
+                                    </td>
+                                    <td class="${year.price_change_pct >= 0 ? 'positive' : 'negative'}">
+                                        ${formatPercent(year.price_change_pct)}
+                                    </td>
+                                    <td>${year.price_multiplier.toFixed(2)}x</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 15px; padding: 12px; background: #f9fafb; border-radius: 8px; font-size: 0.9em; color: #666;">
+                    <strong>Giải thích:</strong><br>
+                    - YoY Growth %: Tăng trưởng năm-over-year (Năm 1 so với giá hiện tại)<br>
+                    - vs Current Price: % thay đổi so với giá hiện tại<br>
+                    - Multiplier: Số lần tăng giá trị so với giá hiện tại (ví dụ: 1.50x = tăng 50%)
+                </div>
+            </div>
+            ` : ''}
+            
             ${result.saved_at ? `
             <div class="section">
-                <div class="detail-label">Thời gian phân tích</div>
-                <div class="detail-value">${new Date(result.saved_at).toLocaleString('vi-VN')}</div>
+                <div class="detail-item">
+                    <div class="detail-label">Ngày phân tích</div>
+                    <div class="detail-value">${new Date(result.saved_at).toLocaleString('vi-VN')}</div>
+                </div>
             </div>
             ` : ''}
         `;

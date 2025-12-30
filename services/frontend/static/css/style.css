@@ -518,6 +518,77 @@ header h1 {
     color: #111827;
 }
 
+.detail-value.positive {
+    color: #10b981;
+}
+
+.detail-value.negative {
+    color: #ef4444;
+}
+
+/* Table Styles */
+.table-container {
+    overflow-x: auto;
+    margin-top: 15px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.data-table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.data-table th {
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.data-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 0.95em;
+}
+
+.data-table tbody tr:hover {
+    background: #f9fafb;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table td.positive {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.data-table td.negative {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.data-table td strong {
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* Modal improvements */
+.modal-content {
+    max-width: 1200px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .stocks-grid {

@@ -189,6 +189,43 @@ def get_shares_outstanding(ticker: str) -> Optional[float]:
                     shares = float(row[0])
                     par_value = float(row[1]) if row[1] else 10000
                     
+                    # Validation: Check for suspiciously large shares (likely unit error)
+                    if shares > 1e12:  # More than 1 trillion shares
+                        error_msg = (
+                            f"Shares outstanding validation failed for {ticker}: {shares:,.0f}. "
+                            f"This value from database is unreasonably large (>1 trillion shares) "
+                            f"and likely indicates a unit error. Please re-sync shares data."
+                        )
+                        logger.error(error_msg)
+                        # Don't raise error here, let caller handle it or fallback to vnstock
+                        # Return None to trigger fallback
+                        return None
+                    
+                    # Cross-validation with market cap if available
+                    try:
+                        from src.core.fcfs import get_market_cap
+                        market_cap, price = get_market_cap(ticker)
+                        if market_cap and price and price > 0:
+                            shares_from_mc = market_cap / price
+                            diff_pct = abs(shares - shares_from_mc) / shares_from_mc * 100 if shares_from_mc > 0 else 0
+                            
+                            # If difference > 10%, log warning and use market cap calculation
+                            if diff_pct > 10:
+                                logger.warning(
+                                    f"Shares from database differs significantly from market cap calculation for {ticker}: "
+                                    f"DB={shares:,.0f}, MC/Price={shares_from_mc:,.0f}, diff={diff_pct:.2f}%. "
+                                    f"Using market cap calculation instead."
+                                )
+                                # Use market cap calculation instead
+                                shares = shares_from_mc
+                            elif diff_pct > 5:
+                                logger.warning(
+                                    f"Shares from database differs from market cap calculation for {ticker}: "
+                                    f"DB={shares:,.0f}, MC/Price={shares_from_mc:,.0f}, diff={diff_pct:.2f}%"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Could not cross-validate shares with market cap for {ticker}: {e}")
+                    
                     # Cache to Redis
                     redis_client.cache_shares(
                         ticker, 

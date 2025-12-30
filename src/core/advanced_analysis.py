@@ -128,7 +128,8 @@ def calculate_valuation_metrics(
     eps: float,
     fcf: float,
     shares: float,
-    market_cap: float
+    market_cap: float,
+    industry_pe: float = None
 ) -> Dict[str, float]:
     """
     Tính các chỉ số định giá
@@ -139,17 +140,21 @@ def calculate_valuation_metrics(
         fcf: Free Cash Flow (TTM)
         shares: Số cổ phiếu đang lưu hành
         market_cap: Vốn hóa thị trường
+        industry_pe: PE trung bình của ngành (optional)
     
     Returns:
         Dict chứa các chỉ số định giá
     """
     metrics = {}
     
-    # P/E Ratio
+    # P/E Ratio của cổ phiếu
     if eps > 0:
         metrics['pe_ratio'] = price / eps
     else:
         metrics['pe_ratio'] = None
+    
+    # P/E Ratio của ngành
+    metrics['industry_pe'] = industry_pe
     
     # P/FCF Ratio (Price to Free Cash Flow)
     fcf_per_share = fcf / shares if shares > 0 else 0
@@ -238,13 +243,14 @@ def generate_advanced_analysis(
         result.get('price', 0)  # Thêm current_price để tính % thay đổi và multiplier
     )
     
-    # Tính các chỉ số định giá
+    # Tính các chỉ số định giá (bao gồm industry PE)
     valuation_metrics = calculate_valuation_metrics(
         result.get('price', 0),
         result.get('eps', 0),
         result.get('fcf', 0) if 'fcf' in result else 0,
         result.get('shares', 1),
-        result.get('market_cap', 0)
+        result.get('market_cap', 0),
+        result.get('industry_pe')  # Industry PE
     )
     
     # Tính upside/downside

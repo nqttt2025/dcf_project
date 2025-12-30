@@ -18,6 +18,7 @@ from .fcfs import (
     get_market_cap
 )
 from .ge import get_growth_estimate
+from .industry_pe import get_industry_pe, get_current_pe, suggest_base_pe, get_pe_analysis
 from .advanced_analysis import generate_advanced_analysis
 from ..utils.logger import get_logger, get_stock_logger
 from ..utils.result_manager import get_result_manager
@@ -139,9 +140,10 @@ class DCFCalculator:
             asyncio.to_thread(get_earnings_per_share_Diluted, self.ticker),
             asyncio.to_thread(price_board_stock, self.ticker),
             asyncio.to_thread(lambda: get_market_cap(self.ticker)[0]),
+            asyncio.to_thread(get_industry_pe, self.ticker),  # Industry PE
         ]
 
-        self.logger.info("Fetching: FCF (TTM), Growth, Shares, EPS, Price, Market Cap (in parallel)...")
+        self.logger.info("Fetching: FCF (TTM), Growth, Shares, EPS, Price, Market Cap, Industry PE (in parallel)...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Check for errors
@@ -156,6 +158,7 @@ class DCFCalculator:
             'eps': results[3],
             'price': results[4],
             'market_cap': results[5],
+            'industry_pe': results[6] if results[6] is not None else None,
         }
 
     def calculate_dcf(self, data):
@@ -167,9 +170,33 @@ class DCFCalculator:
         if data['shares'] is None or data['shares'] <= 0:
             raise ValueError(f"Shares is None or invalid ({data['shares']}) for {self.ticker}. Cannot calculate DCF.")
         
-        # Check for suspiciously large shares (likely unit error)
-        if data['shares'] > 1e12:  # More than 1 trillion shares
-            self.logger.warning(f"Suspiciously large shares value for {self.ticker}: {data['shares']:,.0f}. This might be a unit error.")
+        # Validation using shares_validator
+        try:
+            from src.utils.shares_validator import validate_and_cross_check
+            validate_and_cross_check(
+                shares=data['shares'],
+                ticker=self.ticker,
+                price=data.get('price'),
+                market_cap=data.get('market_cap'),
+                raise_error=True
+            )
+        except ImportError:
+            # Fallback validation if validator not available
+            if data['shares'] > 1e12:  # More than 1 trillion shares
+                error_msg = (
+                    f"Shares outstanding validation failed for {self.ticker}: {data['shares']:,.0f}. "
+                    f"This value is unreasonably large (>1 trillion shares) and likely indicates a unit error. "
+                    f"Please check the shares calculation logic in sync_service.py or fcfs.py."
+                )
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Additional validation: Check reasonable range
+            if data['shares'] > 5e10:  # More than 50 billion shares
+                self.logger.warning(
+                    f"Shares outstanding seems large for {self.ticker}: {data['shares']:,.0f}. "
+                    f"Please verify this value is correct."
+                )
         
         # Warn if FCF is negative
         if data['fcf'] < 0:
@@ -327,6 +354,7 @@ class DCFCalculator:
             'fcf': data['fcf'],  # Thêm FCF vào result
             'growth_estimate': data['ge'],
             'dcf_params': self.dcf_params,
+            'graham_params': self.graham_params,  # Thêm graham_params vào result
             'dcf_fair_value': dcf_fair_value,
             'graham_fair_value': graham_fair_value,
             'average_fair_value': avg_fair_value,
@@ -340,6 +368,17 @@ class DCFCalculator:
             progress_callback(85.0, "Generating advanced analysis...")
         advanced_analysis = generate_advanced_analysis(result, dcf_result)
         result['advanced_analysis'] = advanced_analysis
+        
+        # Add PE analysis (current PE, industry PE, suggested base PE)
+        if progress_callback:
+            progress_callback(90.0, "Calculating PE analysis...")
+        try:
+            pe_analysis = get_pe_analysis(self.ticker)
+            result['pe_analysis'] = pe_analysis
+            self.logger.info(f"PE Analysis for {self.ticker}: Current={pe_analysis.get('current_pe')}, Industry={pe_analysis.get('industry_pe')}, Suggested Base={pe_analysis.get('suggested_base_pe')}")
+        except Exception as e:
+            self.logger.debug(f"Could not get PE analysis: {e}")
+            result['pe_analysis'] = None
 
         self.logger.info("=" * 80)
         self.logger.info("Valuation Summary")

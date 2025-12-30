@@ -557,11 +557,40 @@ def sync_shares_outstanding(db: Session, ticker: Optional[str] = None) -> Dict:
                     elif 'Paid-in capital (Bn. VND)' in latest_row.index:
                         capital = safe_get_value(latest_row, 'Paid-in capital (Bn. VND)')
                         if capital and capital > 0:
-                            shares_outstanding = capital * 1000000 / par_value  # Convert from billions
+                            # Note: Despite the name "(Bn. VND)", the value is actually in VND (not billions)
+                            # So we only divide by par_value, not multiply by 1,000,000
+                            shares_outstanding = capital / par_value
+                            
+                            # Validation using shares_validator
+                            try:
+                                from src.utils.shares_validator import validate_shares
+                                validate_shares(shares_outstanding, stock_ticker, raise_error=True)
+                            except ImportError:
+                                # Fallback validation if validator not available
+                                if shares_outstanding > 1e12:  # More than 1 trillion shares
+                                    error_msg = (
+                                        f"Shares outstanding too large for {stock_ticker}: {shares_outstanding:,.0f}. "
+                                        f"This is likely a unit error. Capital value: {capital:,.0f} VND, "
+                                        f"par_value: {par_value}. Please check the calculation logic."
+                                    )
+                                    raise ValueError(error_msg)
+                            
                             calculation_method = 'paid_in_capital'
                             source_column = 'Paid-in capital (Bn. VND)'
                     
                     if shares_outstanding and shares_outstanding > 0:
+                        # Final validation before saving to database
+                        try:
+                            from src.utils.shares_validator import validate_shares
+                            validate_shares(shares_outstanding, stock_ticker, raise_error=True)
+                        except ImportError:
+                            # Fallback validation if validator not available
+                            if shares_outstanding > 1e12:  # More than 1 trillion shares
+                                error_msg = (
+                                    f"Shares outstanding validation failed for {stock_ticker}: {shares_outstanding:,.0f}. "
+                                    f"This value is unreasonably large and likely incorrect."
+                                )
+                                raise ValueError(error_msg)
                         period_date = datetime.now().date()
                         
                         insert_query = text("""
