@@ -73,23 +73,11 @@ except Exception as e:
     print(f"Warning: Redis connection failed: {e}")
 
 
-# Scheduled jobs storage
-scheduled_jobs = {}
-job_scheduler = None
-
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables and register scheduled jobs (but don't start them automatically)"""
+    """Initialize database tables"""
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables initialized")
-    
-    # Register scheduled jobs info (but don't start scheduler automatically)
-    # Jobs will be triggered manually from frontend
-    try:
-        register_scheduled_jobs_info()
-        logger.info("Scheduled jobs registered (manual trigger only)")
-    except Exception as e:
-        logger.error(f"Failed to register scheduled jobs: {e}", exc_info=True)
 
 
 @app.get("/")
@@ -489,26 +477,62 @@ async def get_stock_info(ticker: str, db: Session = Depends(get_db)):
             shares_dict = dict(shares_data._mapping) if hasattr(shares_data, '_mapping') else dict(zip(shares_data.keys(), shares_data))
         
         # Get latest EPS - calculate from net_profit and shares if available
+        # Try TTM (Trailing Twelve Months) net_profit first, then fallback to latest quarter
         eps = None
         try:
-            eps_query = text("""
-                SELECT net_profit FROM financial_data 
-                WHERE stock_id = :stock_id AND net_profit IS NOT NULL
-                ORDER BY period_date DESC 
-                LIMIT 1
+            # First try: Calculate EPS from TTM net_profit (sum of last 4 quarters)
+            ttm_eps_query = text("""
+                SELECT SUM(net_profit) as ttm_net_profit
+                FROM financial_data 
+                WHERE stock_id = :stock_id 
+                  AND net_profit IS NOT NULL
+                  AND period_type = 'quarter'
+                  AND period_date >= CURRENT_DATE - INTERVAL '1 year'
             """)
-            net_profit_result = db.execute(eps_query, {"stock_id": stock_dict['id']}).fetchone()
+            ttm_net_profit_result = db.execute(ttm_eps_query, {"stock_id": stock_dict['id']}).fetchone()
             shares_outstanding = shares_dict.get('shares_outstanding') if shares_dict else None
-            if net_profit_result and net_profit_result[0] and shares_outstanding:
-                eps = net_profit_result[0] / shares_outstanding
+            
+            if ttm_net_profit_result and ttm_net_profit_result[0] and shares_outstanding and shares_outstanding > 0:
+                ttm_net_profit = float(ttm_net_profit_result[0])
+                if ttm_net_profit > 0:
+                    eps = ttm_net_profit / shares_outstanding
+                    logger.debug(f"Calculated EPS from TTM net_profit for {ticker}: {eps:.2f}")
+            
+            # Fallback: Try latest single quarter/year if TTM not available
+            if eps is None:
+                eps_query = text("""
+                    SELECT net_profit, period_type FROM financial_data 
+                    WHERE stock_id = :stock_id AND net_profit IS NOT NULL
+                    ORDER BY period_date DESC 
+                    LIMIT 1
+                """)
+                net_profit_result = db.execute(eps_query, {"stock_id": stock_dict['id']}).fetchone()
+                if net_profit_result and net_profit_result[0] and shares_outstanding and shares_outstanding > 0:
+                    net_profit = float(net_profit_result[0])
+                    period_type = net_profit_result[1] if len(net_profit_result) > 1 else None
+                    
+                    # If it's annual data, use directly; if quarterly, multiply by 4 for annualized
+                    if period_type == 'year':
+                        eps = net_profit / shares_outstanding
+                    elif period_type == 'quarter':
+                        # Annualize quarterly EPS (multiply by 4)
+                        eps = (net_profit * 4) / shares_outstanding
+                    else:
+                        eps = net_profit / shares_outstanding
+                    
+                    logger.debug(f"Calculated EPS from {period_type or 'latest'} net_profit for {ticker}: {eps:.2f}")
         except Exception as e:
             logger.debug(f"Could not calculate EPS for {ticker}: {e}")
             eps = None
         
         # Calculate PE ratio if we have price and EPS
         pe_ratio = None
-        if market_data_dict and market_data_dict.get('close_price') and eps:
-            pe_ratio = market_data_dict['close_price'] / eps
+        if market_data_dict and market_data_dict.get('close_price') and eps and eps > 0:
+            try:
+                pe_ratio = market_data_dict['close_price'] / eps
+                logger.debug(f"Calculated P/E ratio for {ticker}: {pe_ratio:.2f}")
+            except (ZeroDivisionError, TypeError):
+                pe_ratio = None
         
         # Calculate market cap if we have price and shares
         market_cap = None
@@ -979,23 +1003,9 @@ async def get_sync_status(
 
 @app.get("/api/database/sync/jobs")
 async def list_sync_jobs():
-    """List all sync jobs including scheduled, active, and completed"""
+    """List all active and recent completed sync jobs from Redis/memory"""
     import json
     jobs = []
-    
-    # Add scheduled jobs from scheduled_jobs dict (this is the source of truth)
-    scheduled_job_list = []
-    for job_id, job_info in scheduled_jobs.items():
-        scheduled_job_list.append({
-            "sync_id": job_id,
-            "name": job_info.get('name', job_id),
-            "description": job_info.get('description', ''),
-            "status": job_info.get('status', 'manual'),
-            "job_type": job_info.get('job_type', 'unknown'),  # Use actual job_type from job_info
-            "days": job_info.get('days'),
-            "next_run": job_info.get('next_run'),
-            "schedule": job_info.get('schedule', 'Manual trigger only')
-        })
     
     # Get jobs from Redis
     if HAS_REDIS and sync_redis_client and sync_redis_client._client:
@@ -1055,6 +1065,60 @@ async def list_sync_jobs():
             if job.get('status') in ['running', 'pending']:
                 active_jobs.append(job)
     
+    # Define scheduled jobs list (static list for frontend to display)
+    scheduled_job_list = [
+        {
+            "sync_id": "market_data_sync_recent",
+            "name": "Market Data Sync (Recent 7 days)",
+            "description": "Sync market data for the last 7 days for all active stocks",
+            "status": "manual",
+            "job_type": "market_data",
+            "days": 7,
+            "schedule": "Manual trigger only"
+        },
+        {
+            "sync_id": "market_data_sync_full",
+            "name": "Market Data Sync (Full 30 days)",
+            "description": "Sync market data for the last 30 days for all active stocks",
+            "status": "manual",
+            "job_type": "market_data",
+            "days": 30,
+            "schedule": "Manual trigger only"
+        },
+        {
+            "sync_id": "financial_data_sync",
+            "name": "Financial Data Sync",
+            "description": "Sync financial data (income statement, balance sheet, cash flow) for all active stocks",
+            "status": "manual",
+            "job_type": "financial_data",
+            "schedule": "Manual trigger only"
+        },
+        {
+            "sync_id": "shares_outstanding_sync",
+            "name": "Shares Outstanding Sync",
+            "description": "Sync shares outstanding data for all active stocks",
+            "status": "manual",
+            "job_type": "shares_outstanding",
+            "schedule": "Manual trigger only"
+        },
+        {
+            "sync_id": "current_price_sync",
+            "name": "Current Price Sync",
+            "description": "Sync current stock price for all active stocks (updates today's price)",
+            "status": "manual",
+            "job_type": "current_price",
+            "schedule": "Manual trigger only"
+        },
+        {
+            "sync_id": "base_pe_update",
+            "name": "Base PE Update",
+            "description": "Calculate and update base PE for all stocks based on industry and current PE",
+            "status": "manual",
+            "job_type": "base_pe",
+            "schedule": "Manual trigger only"
+        }
+    ]
+    
     return {
         "scheduled_jobs": scheduled_job_list,
         "active_jobs": active_jobs,
@@ -1065,88 +1129,37 @@ async def list_sync_jobs():
     }
 
 
-def register_scheduled_jobs_info():
-    """Register scheduled jobs info (for manual trigger only)"""
-    # Store scheduled job info (without starting scheduler)
-    scheduled_jobs['market_data_sync_recent'] = {
-        'id': 'market_data_sync_recent',
-        'name': 'Market Data Sync (Recent 7 days)',
-        'description': 'Sync market data for the last 7 days for all active stocks',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'market_data',
-        'days': 7,
-        'next_run': None
-    }
-    
-    scheduled_jobs['market_data_sync_full'] = {
-        'id': 'market_data_sync_full',
-        'name': 'Market Data Sync (Full 30 days)',
-        'description': 'Sync market data for the last 30 days for all active stocks',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'market_data',
-        'days': 30,
-        'next_run': None
-    }
-    
-    scheduled_jobs['financial_data_sync'] = {
-        'id': 'financial_data_sync',
-        'name': 'Financial Data Sync',
-        'description': 'Sync financial data (income statement, balance sheet, cash flow) for all active stocks',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'financial_data',
-        'days': None,
-        'next_run': None
-    }
-    
-    scheduled_jobs['shares_outstanding_sync'] = {
-        'id': 'shares_outstanding_sync',
-        'name': 'Shares Outstanding Sync',
-        'description': 'Sync shares outstanding data for all active stocks',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'shares_outstanding',
-        'days': None,
-        'next_run': None
-    }
-    
-    scheduled_jobs['current_price_sync'] = {
-        'id': 'current_price_sync',
-        'name': 'Current Price Sync',
-        'description': 'Sync current stock price for all active stocks (updates today\'s price)',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'current_price',
-        'days': None,
-        'next_run': None
-    }
-    
-    scheduled_jobs['base_pe_update'] = {
-        'id': 'base_pe_update',
-        'name': 'Base PE Update',
-        'description': 'Calculate and update base PE for all stocks based on industry and current PE',
-        'schedule': 'Manual trigger only',
-        'status': 'manual',
-        'job_type': 'base_pe',
-        'days': None,
-        'next_run': None
-    }
-    
-    logger.info(f"Registered {len(scheduled_jobs)} scheduled jobs for manual trigger")
+# Job type mapping for trigger endpoint
+JOB_TYPE_MAP = {
+    "market_data_sync_recent": {"job_type": "market_data", "days": 7},
+    "market_data_sync_full": {"job_type": "market_data", "days": 30},
+    "financial_data_sync": {"job_type": "financial_data", "days": None},
+    "shares_outstanding_sync": {"job_type": "shares_outstanding", "days": None},
+    "current_price_sync": {"job_type": "current_price", "days": None},
+    "base_pe_update": {"job_type": "base_pe", "days": None}
+}
+
+JOB_NAME_MAP = {
+    "market_data_sync_recent": "Market Data Sync (Recent 7 days)",
+    "market_data_sync_full": "Market Data Sync (Full 30 days)",
+    "financial_data_sync": "Financial Data Sync",
+    "shares_outstanding_sync": "Shares Outstanding Sync",
+    "current_price_sync": "Current Price Sync",
+    "base_pe_update": "Base PE Update"
+}
 
 @app.post("/api/database/sync/jobs/{job_id}/trigger")
-async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
-    """Trigger a scheduled job manually"""
-    if job_id not in scheduled_jobs:
+async def trigger_sync_job(job_id: str, db: Session = Depends(get_db)):
+    """Trigger a sync job manually"""
+    if job_id not in JOB_TYPE_MAP:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     
-    job_info = scheduled_jobs[job_id]
-    job_type = job_info.get('job_type')
-    days = job_info.get('days')
+    job_config = JOB_TYPE_MAP[job_id]
+    job_type = job_config["job_type"]
+    days = job_config["days"]
+    job_name = JOB_NAME_MAP.get(job_id, job_id)
     
-    logger.info(f"Manually triggering job: {job_id} ({job_info.get('name')})")
+    logger.info(f"Manually triggering job: {job_id} ({job_name})")
     
     # Generate sync ID
     sync_id = f"{job_id}_manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -1176,7 +1189,6 @@ async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
             daemon=True
         )
     elif job_type == 'current_price':
-        # Import sync function
         from .sync_service import sync_current_price
         from .database import get_db
         
@@ -1192,7 +1204,6 @@ async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
             daemon=True
         )
     elif job_type == 'base_pe':
-        # Import PE update function
         from .sync_service import sync_base_pe
         from .database import get_db
         
@@ -1213,143 +1224,12 @@ async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
     thread.start()
     
     return {
-        "message": f"Job '{job_info.get('name')}' triggered successfully",
+        "message": f"Job '{job_name}' triggered successfully",
         "job_id": job_id,
         "sync_id": sync_id,
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-
-def run_scheduled_market_data_sync():
-    """Run scheduled market data sync (last 7 days)"""
-    logger.info("Starting scheduled market data sync (last 7 days)")
-    try:
-        from .database import get_db
-        db = next(get_db())
-        
-        sync_id = f"market_data_scheduled_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        # Update status
-        status = {
-            "status": "running",
-            "table": "market_data",
-            "ticker": None,
-            "progress": "Starting scheduled sync...",
-            "progress_percent": 0.0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "job_type": "scheduled",
-            "days": 7
-        }
-        
-        try:
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
-        except:
-            sync_status_store[sync_id] = status
-        
-        # Run sync
-        from .sync_service import sync_market_data
-        results = sync_market_data(db, ticker=None, days=7)
-        
-        # Update status to completed
-        status["status"] = "completed"
-        status["progress"] = "Scheduled sync completed"
-        status["progress_percent"] = 100.0
-        status["completed_at"] = datetime.now(timezone.utc).isoformat()
-        status["summary"] = results
-        
-        try:
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
-        except:
-            sync_status_store[sync_id] = status
-        
-        logger.info(f"Scheduled market data sync completed: {results.get('success', 0)} success, {results.get('failed', 0)} failed")
-        db.close()
-        
-    except Exception as e:
-        logger.error(f"Error in scheduled market data sync: {e}", exc_info=True)
-        try:
-            status["status"] = "failed"
-            status["error"] = str(e)
-            status["failed_at"] = datetime.now(timezone.utc).isoformat()
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
-        except:
-            pass
-
-def run_scheduled_market_data_sync_full():
-    """Run scheduled full market data sync (last 30 days)"""
-    logger.info("Starting scheduled full market data sync (last 30 days)")
-    try:
-        from .database import get_db
-        db = next(get_db())
-        
-        sync_id = f"market_data_scheduled_full_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        # Update status
-        status = {
-            "status": "running",
-            "table": "market_data",
-            "ticker": None,
-            "progress": "Starting scheduled full sync...",
-            "progress_percent": 0.0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "job_type": "scheduled_full",
-            "days": 30
-        }
-        
-        try:
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
-        except:
-            sync_status_store[sync_id] = status
-        
-        # Run sync
-        from .sync_service import sync_market_data
-        results = sync_market_data(db, ticker=None, days=30)
-        
-        # Update status to completed
-        status["status"] = "completed"
-        status["progress"] = "Scheduled full sync completed"
-        status["progress_percent"] = 100.0
-        status["completed_at"] = datetime.now(timezone.utc).isoformat()
-        status["summary"] = results
-        
-        try:
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
-        except:
-            sync_status_store[sync_id] = status
-        
-        logger.info(f"Scheduled full market data sync completed: {results.get('success', 0)} success, {results.get('failed', 0)} failed")
-        db.close()
-        
-    except Exception as e:
-        logger.error(f"Error in scheduled full market data sync: {e}", exc_info=True)
-        try:
-            status["status"] = "failed"
-            status["error"] = str(e)
-            status["failed_at"] = datetime.now(timezone.utc).isoformat()
-            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
-                import json
-                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
-        except:
-            pass
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown scheduled jobs"""
-    global job_scheduler
-    if job_scheduler:
-        logger.info("Shutting down scheduled jobs")
-        job_scheduler.shutdown()
-        job_scheduler = None
 
 if __name__ == "__main__":
     import uvicorn

@@ -23,10 +23,18 @@
         }
         
         .page-header {
-            text-align: center;
             margin-bottom: 30px;
             padding-bottom: 20px;
             border-bottom: 3px solid #667eea;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
         }
         
         .page-header h1 {
@@ -39,6 +47,40 @@
         .page-header p {
             color: #6b7280;
             font-size: 1.1em;
+        }
+
+        .nav-menu,
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a,
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s;
+            background: rgba(102, 126, 234, 0.1);
+            border: 2px solid transparent;
+        }
+
+        .nav-menu a:hover,
+        .nav-links a:hover {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-menu a.active,
+        .nav-links a.active {
+            background: rgba(102, 126, 234, 0.25);
+            border-color: rgba(102, 126, 234, 0.5);
+            font-weight: 600;
         }
         
         .action-bar {
@@ -574,24 +616,6 @@
             margin-bottom: 20px;
         }
         
-        .nav-links {
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-        
-        .nav-links a {
-            color: #667eea;
-            text-decoration: none;
-            margin-right: 25px;
-            font-weight: 600;
-            transition: color 0.3s;
-        }
-        
-        .nav-links a:hover {
-            color: #764ba2;
-            text-decoration: underline;
-        }
         
         .schema-section {
             margin-bottom: 30px;
@@ -666,13 +690,19 @@
 <body>
     <div class="database-container">
         <div class="page-header">
-            <h1>🗄️ Database Monitor</h1>
-            <p>Monitor và quản lý cơ sở dữ liệu hệ thống</p>
-        </div>
-        
-        <div class="nav-links">
-            <a href="/static/index.html">🏠 Dashboard</a>
-            <a href="/static/monitoring.html">📊 Monitoring</a>
+            <div class="header-content">
+                <div>
+                    <h1>🗄️ Database Monitor</h1>
+                    <p>Monitor và quản lý cơ sở dữ liệu hệ thống</p>
+                </div>
+                <nav class="nav-links">
+                    <a href="/">📊 Dashboard</a>
+                    <a href="/static/stock-info.html">📈 Stock Info</a>
+                    <a href="/static/database.html" class="active">🗄️ Database</a>
+                    <a href="/static/jobs.html">🔧 Jobs</a>
+                    <a href="/static/monitoring.html">🔍 Monitoring</a>
+                </nav>
+            </div>
         </div>
         
         <div class="action-bar">
@@ -698,20 +728,6 @@
             </div>
             
             <div id="syncStatus" class="sync-status"></div>
-        </div>
-        
-        <!-- Scheduled Jobs Section -->
-        <div class="card" style="margin-bottom: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #667eea; display: flex; align-items: center; gap: 10px;">
-                    ⏰ Scheduled Jobs
-                </h2>
-            </div>
-            <div id="scheduledJobsContent">
-                <div style="text-align: center; padding: 20px; color: #9ca3af;">
-                    Loading scheduled jobs...
-                </div>
-            </div>
         </div>
         
         <!-- Sync Jobs Section -->
@@ -767,7 +783,6 @@
         let isRefreshing = false;
         let erNetwork = null;
         let allTables = [];
-        let scheduledJobsData = null; // Store scheduled jobs data globally
         
         // Convert GMT timestamp to GMT+7 (Ho Chi Minh City time) and format for display
         function formatTimestampGMT7(timestamp) {
@@ -1542,221 +1557,6 @@
         let jobsPollInterval = 5000; // Start with 5s
         let lastJobsUpdateTime = Date.now();
         
-        async function loadScheduledJobs() {
-            try {
-                const response = await fetch(`${DATABASE_SERVICE_URL}/sync/jobs`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                scheduledJobsData = data; // Store globally for use in triggerScheduledJob
-                const scheduledContent = document.getElementById('scheduledJobsContent');
-                
-                let html = '';
-                
-                if (data.scheduled_jobs && data.scheduled_jobs.length > 0) {
-                    html += '<div style="display: grid; gap: 15px;">';
-                    
-                    for (const job of data.scheduled_jobs) {
-                        const jobName = job.name || job.sync_id;
-                        const jobDescription = job.description || job.schedule || 'Manual trigger only';
-                        const jobId = job.sync_id || job.id;
-                        const isRunning = data.active_jobs && data.active_jobs.some(j => j.sync_id && j.sync_id.startsWith(jobId));
-                        
-                        // Get actual job_type (handle both old and new API format)
-                        const actualJobType = getJobType(jobId, job);
-                        const supportsTicker = actualJobType === 'current_price' || actualJobType === 'base_pe' || actualJobType === 'market_data' || actualJobType === 'financial_data' || actualJobType === 'shares_outstanding';
-                        
-                        html += `
-                            <div style="border: 2px solid ${isRunning ? '#667eea' : '#e5e7eb'}; border-radius: 8px; padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); transition: all 0.3s;">
-                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                                    <div style="flex: 1;">
-                                        <h3 style="margin: 0 0 5px 0; color: #667eea; font-size: 1.1em;">${jobName}</h3>
-                                        <p style="margin: 0; color: #6b7280; font-size: 0.9em;">${jobDescription}</p>
-                                        ${job.days ? `<p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 0.85em;">📅 Sync last ${job.days} days</p>` : ''}
-                                        ${supportsTicker ? `<p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 0.85em;">💡 Supports ticker selection</p>` : ''}
-                                    </div>
-                                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
-                                        ${supportsTicker ? `
-                                            <div style="display: flex; gap: 5px; align-items: center;">
-                                                <input 
-                                                    type="text" 
-                                                    id="tickerInput_${jobId}" 
-                                                    placeholder="Ticker (optional)"
-                                                    style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.85em; width: 100px; text-transform: uppercase;"
-                                                    onkeyup="this.value = this.value.toUpperCase()"
-                                                >
-                                                <button 
-                                                    class="btn btn-primary" 
-                                                    onclick="triggerScheduledJob('${jobId}', document.getElementById('tickerInput_${jobId}').value)"
-                                                    id="triggerBtn_${jobId}"
-                                                    ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
-                                                    style="padding: 8px 16px; font-size: 0.85em;">
-                                                    ${isRunning ? '🔄 Running...' : '▶️ Run'}
-                                                </button>
-                                            </div>
-                                            <button 
-                                                class="btn btn-secondary" 
-                                                onclick="triggerScheduledJob('${jobId}', null)"
-                                                id="triggerAllBtn_${jobId}"
-                                                ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
-                                                style="padding: 6px 12px; font-size: 0.8em; background: #6b7280;">
-                                                ${isRunning ? '⏳' : '🌐 All Stocks'}
-                                            </button>
-                                        ` : `
-                                            <button 
-                                                class="btn btn-primary" 
-                                                onclick="triggerScheduledJob('${jobId}')"
-                                                id="triggerBtn_${jobId}"
-                                                ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
-                                                style="padding: 10px 20px; font-size: 0.9em;">
-                                                ${isRunning ? '🔄 Running...' : '▶️ Run Now'}
-                                            </button>
-                                        `}
-                                    </div>
-                                </div>
-                                ${isRunning ? `
-                                    <div style="margin-top: 10px; padding: 10px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #667eea;">
-                                        <div style="font-size: 0.85em; color: #667eea;">
-                                            ⏳ Job is currently running...
-                                        </div>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        `;
-                    }
-                    
-                    html += '</div>';
-                } else {
-                    html = '<div style="text-align: center; padding: 20px; color: #9ca3af;">No scheduled jobs available</div>';
-                }
-                
-                scheduledContent.innerHTML = html;
-            } catch (error) {
-                document.getElementById('scheduledJobsContent').innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #ef4444;">
-                        Error loading scheduled jobs: ${error.message}
-                    </div>
-                `;
-            }
-        }
-        
-        async function triggerScheduledJob(jobId, ticker = null) {
-            const button = document.getElementById(`triggerBtn_${jobId}`);
-            const triggerAllBtn = document.getElementById(`triggerAllBtn_${jobId}`);
-            if ((!button || button.disabled) && (!triggerAllBtn || triggerAllBtn.disabled)) return;
-            
-            const activeButton = ticker && ticker.trim() ? button : (triggerAllBtn || button);
-            if (!activeButton) {
-                console.error('No button found for job:', jobId);
-                return;
-            }
-            const originalText = activeButton.innerHTML;
-            activeButton.disabled = true;
-            activeButton.innerHTML = '⏳ Starting...';
-            activeButton.style.opacity = '0.5';
-            
-            if (button && button !== activeButton) {
-                button.disabled = true;
-                button.style.opacity = '0.5';
-            }
-            if (triggerAllBtn && triggerAllBtn !== activeButton) {
-                triggerAllBtn.disabled = true;
-                triggerAllBtn.style.opacity = '0.5';
-            }
-            
-            try {
-                // Get job data to determine job_type
-                // Use scheduledJobsData if available, otherwise fetch it
-                let jobData = null;
-                if (scheduledJobsData && scheduledJobsData.scheduled_jobs) {
-                    jobData = scheduledJobsData.scheduled_jobs.find(j => (j.sync_id || j.id) === jobId);
-                } else {
-                    // Fallback: fetch jobs data if not available
-                    try {
-                        const jobsResponse = await fetch(`${DATABASE_SERVICE_URL}/sync/jobs`);
-                        scheduledJobsData = await jobsResponse.json();
-                        jobData = scheduledJobsData.scheduled_jobs?.find(j => (j.sync_id || j.id) === jobId);
-                    } catch (e) {
-                        console.warn('Could not fetch jobs data:', e);
-                    }
-                }
-                const jobType = getJobType(jobId, jobData);
-                
-                let url = `${DATABASE_SERVICE_URL}/sync/jobs/${jobId}/trigger`;
-                if (ticker && ticker.trim()) {
-                    // For jobs that support ticker, use direct endpoint
-                    if (jobType === 'current_price') {
-                        url = `${DATABASE_SERVICE_URL}/sync/current-price?ticker=${ticker.trim().toUpperCase()}`;
-                    } else if (jobType === 'base_pe') {
-                        url = `${DATABASE_SERVICE_URL}/sync/base-pe?ticker=${ticker.trim().toUpperCase()}`;
-                    } else if (jobType === 'market_data') {
-                        // For market_data, need to determine days parameter
-                        const days = jobData?.days || 7;
-                        url = `${DATABASE_SERVICE_URL}/sync/market_data?ticker=${ticker.trim().toUpperCase()}&days=${days}`;
-                    } else if (jobType === 'financial_data') {
-                        url = `${DATABASE_SERVICE_URL}/sync/financial_data?ticker=${ticker.trim().toUpperCase()}`;
-                    } else if (jobType === 'shares_outstanding') {
-                        url = `${DATABASE_SERVICE_URL}/sync/shares_outstanding?ticker=${ticker.trim().toUpperCase()}`;
-                    }
-                }
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
-                    throw new Error(errorData.detail || 'Failed to trigger job');
-                }
-                
-                const data = await response.json();
-                
-                // Show success message
-                const successMsg = document.createElement('div');
-                successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000;';
-                successMsg.innerHTML = `✓ ${data.message || 'Job triggered successfully'}`;
-                document.body.appendChild(successMsg);
-                
-                setTimeout(() => {
-                    successMsg.remove();
-                }, 3000);
-                
-                // Reload jobs to show the new active job
-                setTimeout(() => {
-                    loadSyncJobs();
-                    loadScheduledJobs();
-                }, 1000);
-                
-            } catch (error) {
-                // Reset button states
-                if (button) {
-                    button.disabled = false;
-                    button.innerHTML = originalText;
-                    button.style.opacity = '1';
-                }
-                if (triggerAllBtn) {
-                    triggerAllBtn.disabled = false;
-                    triggerAllBtn.style.opacity = '1';
-                }
-                
-                console.error('Error triggering job:', error);
-                
-                const errorMsg = document.createElement('div');
-                errorMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ef4444; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000;';
-                errorMsg.innerHTML = `✗ Error: ${error.message || 'Failed to trigger job'}`;
-                document.body.appendChild(errorMsg);
-                
-                setTimeout(() => {
-                    errorMsg.remove();
-                }, 5000);
-            }
-        }
-        
         async function loadSyncJobs() {
             try {
                 // Use /api/database/sync/jobs which is proxied directly to database service by nginx
@@ -1958,28 +1758,8 @@
         }
         
         loadDatabaseInfo();
-        loadScheduledJobs();
         loadSyncJobs();
         toggleAutoRefreshJobs(); // Start auto-refresh
-        
-                // Helper functions
-        function getJobType(jobId, jobData = null) {
-            // Try to get from jobData first (from API response)
-            if (jobData && jobData.job_type && jobData.job_type !== 'scheduled') {
-                return jobData.job_type;
-            }
-            
-            // Fallback to mapping
-            const jobTypeMap = {
-                'current_price_sync': 'current_price',
-                'base_pe_update': 'base_pe',
-                'market_data_sync_recent': 'market_data',
-                'market_data_sync_full': 'market_data',
-                'financial_data_sync': 'financial_data',
-                'shares_outstanding_sync': 'shares_outstanding'
-            };
-            return jobTypeMap[jobId] || 'unknown';
-        }
         
         function getTableName(jobType) {
             const tableMap = {
@@ -1989,13 +1769,6 @@
             };
             return tableMap[jobType] || jobType;
         }
-        
-        // Reload scheduled jobs when sync jobs are reloaded
-        const originalLoadSyncJobs = loadSyncJobs;
-        loadSyncJobs = async function() {
-            await originalLoadSyncJobs();
-            await loadScheduledJobs();
-        };
     </script>
 </body>
 </html>

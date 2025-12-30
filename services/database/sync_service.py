@@ -369,6 +369,13 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                 if price_df is not None and (not HAS_PANDAS or (not price_df.empty and len(price_df) > 0)):
                     logger.info(f"Processing {len(price_df) if HAS_PANDAS else 'unknown'} rows for {stock_ticker}")
                     
+                    # Log column names for debugging
+                    if HAS_PANDAS and not price_df.empty:
+                        logger.debug(f"Available columns for {stock_ticker}: {list(price_df.columns)}")
+                        # Log first row for debugging
+                        if len(price_df) > 0:
+                            logger.debug(f"First row sample for {stock_ticker}: {price_df.iloc[0].to_dict()}")
+                    
                     for row_idx, row in price_df.iterrows():
                         try:
                             def safe_get_date(row, key, default_idx):
@@ -383,40 +390,91 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                                             return datetime.now().date()
                                     return None
                             
+                            # Try multiple possible column names for date
                             trade_date = safe_get_date(row, 'time', row_idx)
+                            if not trade_date:
+                                trade_date = safe_get_date(row, 'date', row_idx)
+                            if not trade_date:
+                                trade_date = safe_get_date(row, 'Time', row_idx)
+                            if not trade_date:
+                                trade_date = safe_get_date(row, 'Date', row_idx)
                             if not trade_date:
                                 logger.debug(f"Skipping row {row_idx} for {stock_ticker}: invalid trade_date")
                                 continue
                             
-                            def safe_get_float(row, key):
-                                if key not in row.index:
-                                    return None
-                                value = row.get(key)
-                                if HAS_PANDAS:
-                                    return float(value) if pd.notna(value) else None
-                                else:
-                                    return float(value) if value is not None else None
+                            def safe_get_float(row, key, alt_keys=None):
+                                """Try to get float value, checking multiple possible column names"""
+                                keys_to_try = [key]
+                                if alt_keys:
+                                    keys_to_try.extend(alt_keys)
+                                
+                                for k in keys_to_try:
+                                    if k in row.index:
+                                        value = row.get(k)
+                                        if HAS_PANDAS:
+                                            if pd.notna(value):
+                                                try:
+                                                    return float(value)
+                                                except (ValueError, TypeError):
+                                                    continue
+                                        else:
+                                            if value is not None:
+                                                try:
+                                                    return float(value)
+                                                except (ValueError, TypeError):
+                                                    continue
+                                return None
                             
-                            def safe_get_int(row, key):
-                                if key not in row.index:
-                                    return None
-                                value = row.get(key)
-                                if HAS_PANDAS:
-                                    return int(value) if pd.notna(value) else None
-                                else:
-                                    return int(value) if value is not None else None
+                            def safe_get_int(row, key, alt_keys=None):
+                                """Try to get int value, checking multiple possible column names"""
+                                keys_to_try = [key]
+                                if alt_keys:
+                                    keys_to_try.extend(alt_keys)
+                                
+                                for k in keys_to_try:
+                                    if k in row.index:
+                                        value = row.get(k)
+                                        if HAS_PANDAS:
+                                            if pd.notna(value):
+                                                try:
+                                                    return int(value)
+                                                except (ValueError, TypeError):
+                                                    continue
+                                        else:
+                                            if value is not None:
+                                                try:
+                                                    return int(value)
+                                                except (ValueError, TypeError):
+                                                    continue
+                                return None
                             
-                            open_price = safe_get_float(row, 'open')
-                            high_price = safe_get_float(row, 'high')
-                            low_price = safe_get_float(row, 'low')
-                            close_price = safe_get_float(row, 'close')
-                            volume = safe_get_int(row, 'volume')
+                            # Try multiple possible column name variations (lowercase, uppercase, capitalized)
+                            open_price = safe_get_float(row, 'open', ['Open', 'OPEN', 'open_price', 'Open Price'])
+                            high_price = safe_get_float(row, 'high', ['High', 'HIGH', 'high_price', 'High Price'])
+                            low_price = safe_get_float(row, 'low', ['Low', 'LOW', 'low_price', 'Low Price'])
+                            close_price = safe_get_float(row, 'close', ['Close', 'CLOSE', 'close_price', 'Close Price'])
+                            volume = safe_get_int(row, 'volume', ['Volume', 'VOLUME', 'vol'])
+                            
+                            # Log if we couldn't find the expected columns
+                            if open_price is None or high_price is None or low_price is None or close_price is None:
+                                logger.warning(f"Missing OHLC data for {stock_ticker} on {trade_date}. Found: open={open_price}, high={high_price}, low={low_price}, close={close_price}")
+                                logger.debug(f"Available columns: {list(row.index) if HAS_PANDAS else 'N/A'}")
+                            
+                            # Validate OHLC data before inserting
+                            if open_price is None or high_price is None or low_price is None or close_price is None:
+                                logger.warning(f"Skipping row {row_idx} for {stock_ticker} on {trade_date}: missing OHLC data")
+                                continue
+                            
+                            # Validate logical consistency: high >= low, high >= open, high >= close, low <= open, low <= close
+                            if high_price < low_price or high_price < open_price or high_price < close_price or low_price > open_price or low_price > close_price:
+                                logger.warning(f"Invalid OHLC data for {stock_ticker} on {trade_date}: O={open_price}, H={high_price}, L={low_price}, C={close_price}. Skipping.")
+                                continue
                             
                             # Check if record already exists
                             check_query = text("SELECT COUNT(*) FROM market_data WHERE stock_id = :stock_id AND trade_date = :trade_date")
                             exists = db.execute(check_query, {"stock_id": stock_id, "trade_date": trade_date}).scalar() > 0
                             
-                            # Insert or update
+                            # Insert or update - always update OHLC data from historical_data (more accurate)
                             insert_query = text("""
                                 INSERT INTO market_data (
                                     stock_id, trade_date,
@@ -433,8 +491,12 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                                     high_price = EXCLUDED.high_price,
                                     low_price = EXCLUDED.low_price,
                                     close_price = EXCLUDED.close_price,
-                                    adjusted_close = EXCLUDED.adjusted_close,
+                                    adjusted_close = EXCLUDED.close_price,
                                     volume = EXCLUDED.volume,
+                                    data_source = CASE 
+                                        WHEN EXCLUDED.data_source = 'vnstock' THEN 'vnstock'
+                                        ELSE EXCLUDED.data_source
+                                    END,
                                     updated_at = CURRENT_TIMESTAMP
                             """)
                             
@@ -820,20 +882,57 @@ def sync_current_price(db: Session, ticker: Optional[str] = None) -> Dict:
                     existing = db.execute(check_query, {"stock_id": stock_id, "trade_date": today}).fetchone()
                     
                     if existing:
-                        # Update existing record
-                        update_query = text("""
-                            UPDATE market_data 
-                            SET close_price = :close_price,
-                                adjusted_close = :close_price,
-                                updated_at = CURRENT_TIMESTAMP
+                        # Update existing record - only update close_price if open/high/low are already set
+                        # If open/high/low are all equal to close_price, it means they were set by sync_current_price
+                        # In that case, we should not update to preserve historical data
+                        check_data_query = text("""
+                            SELECT open_price, high_price, low_price, close_price 
+                            FROM market_data 
                             WHERE stock_id = :stock_id AND trade_date = :trade_date
                         """)
-                        db.execute(update_query, {
-                            "stock_id": stock_id,
-                            "trade_date": today,
-                            "close_price": current_price
-                        })
-                        logger.info(f"Updated price for {stock_ticker} on {today}: {current_price:,.0f}")
+                        existing_data = db.execute(check_data_query, {"stock_id": stock_id, "trade_date": today}).fetchone()
+                        
+                        if existing_data:
+                            existing_open = existing_data.open_price
+                            existing_high = existing_data.high_price
+                            existing_low = existing_data.low_price
+                            existing_close = existing_data.close_price
+                            
+                            # Only update if open/high/low are all equal (meaning they were set by sync_current_price)
+                            # Otherwise, preserve the historical data
+                            if existing_open == existing_close and existing_high == existing_close and existing_low == existing_close:
+                                # This was set by sync_current_price, safe to update close_price only
+                                update_query = text("""
+                                    UPDATE market_data 
+                                    SET close_price = :close_price,
+                                        adjusted_close = :close_price,
+                                        updated_at = CURRENT_TIMESTAMP
+                                    WHERE stock_id = :stock_id AND trade_date = :trade_date
+                                """)
+                                db.execute(update_query, {
+                                    "stock_id": stock_id,
+                                    "trade_date": today,
+                                    "close_price": current_price
+                                })
+                                logger.info(f"Updated close_price for {stock_ticker} on {today}: {current_price:,.0f}")
+                            else:
+                                # Historical data exists, only update close_price if it's different
+                                if existing_close != current_price:
+                                    update_query = text("""
+                                        UPDATE market_data 
+                                        SET close_price = :close_price,
+                                            adjusted_close = :close_price,
+                                            updated_at = CURRENT_TIMESTAMP
+                                        WHERE stock_id = :stock_id AND trade_date = :trade_date
+                                    """)
+                                    db.execute(update_query, {
+                                        "stock_id": stock_id,
+                                        "trade_date": today,
+                                        "close_price": current_price
+                                    })
+                                    logger.info(f"Updated close_price for {stock_ticker} on {today}: {current_price:,.0f} (preserving OHLC data)")
+                                else:
+                                    logger.debug(f"Close price unchanged for {stock_ticker} on {today}: {current_price:,.0f}")
                     else:
                         # Insert new record
                         insert_query = text("""

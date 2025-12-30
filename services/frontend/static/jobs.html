@@ -25,7 +25,15 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
-        .header h1 {
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-left h1 {
             font-size: 1.8em;
             margin-bottom: 5px;
         }
@@ -33,6 +41,36 @@
         .header .subtitle {
             opacity: 0.9;
             font-size: 0.9em;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid transparent;
+        }
+
+        .nav-menu a:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-menu a.active {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+            font-weight: 600;
         }
 
         .container {
@@ -190,6 +228,96 @@
             font-size: 0.85em;
         }
 
+        .job-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .info-item {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+
+        .info-label {
+            font-size: 0.75em;
+            color: #6b7280;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 0.95em;
+            color: #1f2937;
+            font-weight: 600;
+        }
+
+        .schedule-info {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #0ea5e9;
+        }
+
+        .schedule-info h4 {
+            margin: 0 0 10px 0;
+            color: #0369a1;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .schedule-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .schedule-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .schedule-label {
+            font-size: 0.75em;
+            color: #0369a1;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .schedule-value {
+            font-size: 0.9em;
+            color: #0c4a6e;
+            font-weight: 600;
+        }
+
+        .enabled-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .enabled-badge.enabled {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .enabled-badge.disabled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
         .last-execution {
             margin-top: 15px;
             padding-top: 15px;
@@ -202,6 +330,35 @@
             display: flex;
             justify-content: space-between;
             margin-bottom: 5px;
+        }
+
+        .job-stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .stat-item {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            color: #6b7280;
+            text-transform: uppercase;
         }
 
         .modal {
@@ -419,8 +576,19 @@
 </head>
 <body>
     <div class="header">
-        <h1>🔧 Job Management</h1>
-        <div class="subtitle">Data Sync Service - Quản lý và theo dõi sync jobs</div>
+        <div class="header-content">
+            <div class="header-left">
+                <h1>🔧 Job Management</h1>
+                <div class="subtitle">Data Sync Service - Quản lý và theo dõi sync jobs</div>
+            </div>
+            <nav class="nav-menu">
+                <a href="/">📊 Dashboard</a>
+                <a href="/static/stock-info.html">📈 Stock Info</a>
+                <a href="/static/database.html">🗄️ Database</a>
+                <a href="/static/jobs.html" class="active">🔧 Jobs</a>
+                <a href="/static/monitoring.html">🔍 Monitoring</a>
+            </nav>
+        </div>
     </div>
 
     <div class="container">
@@ -436,6 +604,23 @@
 
         <div id="jobsContainer" class="jobs-grid">
             <div class="loading">Loading jobs...</div>
+        </div>
+
+        <!-- Scheduled Jobs Section -->
+        <div class="card" style="margin-top: 30px; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #667eea; display: flex; align-items: center; gap: 10px;">
+                    ⏰ Scheduled Jobs
+                </h2>
+                <span id="scheduledJobsRefreshBtn" style="font-size: 0.8em; cursor: pointer; color: #9ca3af;" onclick="loadScheduledJobs()" title="Refresh">
+                    🔄 Refresh
+                </span>
+            </div>
+            <div id="scheduledJobsContent">
+                <div style="text-align: center; padding: 20px; color: #9ca3af;">
+                    Loading scheduled jobs...
+                </div>
+            </div>
         </div>
     </div>
 
@@ -457,11 +642,19 @@
         let jobsData = [];
         let refreshInterval = null;
 
+        // Scheduled Jobs
+        const DATABASE_SERVICE_URL = '/api/database';
+        let scheduledJobsData = null;
+
         // Load jobs on page load
         window.addEventListener('load', () => {
             loadJobs();
+            loadScheduledJobs();
             // Auto-refresh every 5 seconds
-            refreshInterval = setInterval(loadJobs, 5000);
+            refreshInterval = setInterval(() => {
+                loadJobs();
+                loadScheduledJobs();
+            }, 5000);
         });
 
         window.addEventListener('beforeunload', () => {
@@ -474,9 +667,30 @@
             try {
                 const response = await fetch(`${SYNC_SERVICE_URL}/jobs`);
                 const data = await response.json();
-                jobsData = data.jobs || [];
+                const basicJobs = data.jobs || [];
+                
+                // Load full details for each job to get schedule_config and other details
+                const jobsWithDetails = await Promise.all(basicJobs.map(async (job) => {
+                    try {
+                        const detailResponse = await fetch(`${SYNC_SERVICE_URL}/jobs/${job.job_id}`);
+                        const detailData = await detailResponse.json();
+                        return { ...job, ...detailData.job };
+                    } catch (e) {
+                        console.warn(`Failed to load details for job ${job.job_id}:`, e);
+                        return job;
+                    }
+                }));
+                
+                jobsData = jobsWithDetails;
                 renderJobs();
-                document.getElementById('statusText').textContent = `Total: ${data.total} jobs`;
+                
+                const runningCount = jobsData.filter(j => j.status === 'running').length;
+                const enabledCount = jobsData.filter(j => j.enabled !== false).length;
+                document.getElementById('statusText').innerHTML = `
+                    <span>Total: <strong>${data.total}</strong> jobs</span> | 
+                    <span>Running: <strong style="color: #10b981;">${runningCount}</strong></span> | 
+                    <span>Enabled: <strong style="color: #667eea;">${enabledCount}</strong></span>
+                `;
             } catch (error) {
                 console.error('Error loading jobs:', error);
                 document.getElementById('statusText').textContent = 'Error loading jobs';
@@ -491,31 +705,96 @@
                 return;
             }
 
-            container.innerHTML = jobsData.map(job => `
+            container.innerHTML = jobsData.map(job => {
+                const scheduleType = job.schedule_type || 'manual';
+                const scheduleConfig = job.schedule_config || {};
+                const enabled = job.enabled !== false;
+                const nextRun = scheduleConfig.next_run || scheduleConfig.next_run_time || 'N/A';
+                
+                let scheduleDisplay = '';
+                if (scheduleType === 'cron') {
+                    scheduleDisplay = scheduleConfig.cron_expression || 'Not configured';
+                } else if (scheduleType === 'interval') {
+                    const interval = scheduleConfig.interval_seconds || scheduleConfig.interval;
+                    if (interval) {
+                        const hours = Math.floor(interval / 3600);
+                        const minutes = Math.floor((interval % 3600) / 60);
+                        scheduleDisplay = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                    } else {
+                        scheduleDisplay = 'Not configured';
+                    }
+                } else {
+                    scheduleDisplay = 'Manual only';
+                }
+
+                return `
                 <div class="job-card ${job.status}">
                     <div class="job-header">
                         <div>
                             <div class="job-title">${job.name}</div>
-                            <span class="job-type">${job.job_type}</span>
+                            <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                                <span class="job-type">${job.job_type}</span>
+                                <span class="enabled-badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '✓ Enabled' : '✗ Disabled'}</span>
+                            </div>
                         </div>
                         <span class="status-badge status-${job.status}">${job.status}</span>
                     </div>
+                    
                     <div class="job-description">${job.description || 'No description'}</div>
-                    ${job.last_execution ? `
-                        <div class="last-execution">
-                            <div class="execution-item">
-                                <span>Last execution:</span>
-                                <span>${formatTimestamp(job.last_execution.started_at)}</span>
+                    
+                    <div class="schedule-info">
+                        <h4>⏰ Schedule Information</h4>
+                        <div class="schedule-details">
+                            <div class="schedule-item">
+                                <span class="schedule-label">Schedule Type</span>
+                                <span class="schedule-value">${scheduleType.toUpperCase()}</span>
                             </div>
-                            <div class="execution-item">
-                                <span>Status:</span>
-                                <span class="status-badge status-${job.last_execution.status}">${job.last_execution.status}</span>
+                            <div class="schedule-item">
+                                <span class="schedule-label">Schedule</span>
+                                <span class="schedule-value">${scheduleDisplay}</span>
+                            </div>
+                            ${nextRun !== 'N/A' ? `
+                            <div class="schedule-item">
+                                <span class="schedule-label">Next Run</span>
+                                <span class="schedule-value">${formatTimestamp(nextRun)}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="job-info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Job ID</div>
+                            <div class="info-value">${job.job_id}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Job Type</div>
+                            <div class="info-value">${job.job_type}</div>
+                        </div>
+                        ${job.last_execution ? `
+                        <div class="info-item">
+                            <div class="info-label">Last Run</div>
+                            <div class="info-value">${formatTimestamp(job.last_execution.started_at)}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Last Status</div>
+                            <div class="info-value">
+                                <span class="status-badge status-${job.last_execution.status}" style="font-size: 0.7em; padding: 3px 8px;">
+                                    ${job.last_execution.status}
+                                </span>
                             </div>
                         </div>
-                    ` : ''}
+                        ` : `
+                        <div class="info-item">
+                            <div class="info-label">Last Run</div>
+                            <div class="info-value" style="color: #9ca3af;">Never</div>
+                        </div>
+                        `}
+                    </div>
+                    
                     <div class="job-actions">
-                        <button class="btn btn-primary" onclick="runJob('${job.job_id}')" ${job.status === 'running' ? 'disabled' : ''}>
-                            ▶️ Run
+                        <button class="btn btn-primary" onclick="runJob('${job.job_id}')" ${job.status === 'running' || !enabled ? 'disabled' : ''}>
+                            ▶️ Run Now
                         </button>
                         <button class="btn btn-secondary" onclick="showJobDetails('${job.job_id}')">
                             📋 Details
@@ -527,7 +806,8 @@
                         ` : ''}
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         async function runJob(jobId) {
@@ -568,14 +848,64 @@
                 const executions = data.executions || [];
                 
                 document.getElementById('modalTitle').textContent = job.name;
+                
+                const scheduleType = job.schedule_type || 'manual';
+                const scheduleConfig = job.schedule_config || {};
+                const enabled = job.enabled !== false;
+                const config = job.config || {};
+                
+                let scheduleDetails = '';
+                if (scheduleType === 'cron') {
+                    scheduleDetails = `
+                        <p><strong>Cron Expression:</strong> ${scheduleConfig.cron_expression || 'N/A'}</p>
+                        <p><strong>Timezone:</strong> ${scheduleConfig.timezone || 'UTC'}</p>
+                    `;
+                } else if (scheduleType === 'interval') {
+                    const interval = scheduleConfig.interval_seconds || scheduleConfig.interval;
+                    const hours = interval ? Math.floor(interval / 3600) : 0;
+                    const minutes = interval ? Math.floor((interval % 3600) / 60) : 0;
+                    scheduleDetails = `
+                        <p><strong>Interval:</strong> ${hours > 0 ? `${hours} hours ` : ''}${minutes} minutes</p>
+                        <p><strong>Interval (seconds):</strong> ${interval || 'N/A'}</p>
+                    `;
+                } else {
+                    scheduleDetails = '<p><strong>Schedule:</strong> Manual execution only</p>';
+                }
+                
                 document.getElementById('modalBody').innerHTML = `
-                    <div>
-                        <h3>Job Information</h3>
-                        <p><strong>Job ID:</strong> ${job.job_id}</p>
-                        <p><strong>Type:</strong> ${job.job_type}</p>
-                        <p><strong>Schedule:</strong> ${job.schedule_type}</p>
-                        <p><strong>Description:</strong> ${job.description || 'N/A'}</p>
+                    <div style="margin-bottom: 25px;">
+                        <h3 style="color: #1f2937; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">Job Information</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                            <div>
+                                <p><strong>Job ID:</strong> ${job.job_id}</p>
+                                <p><strong>Name:</strong> ${job.name}</p>
+                                <p><strong>Type:</strong> ${job.job_type}</p>
+                                <p><strong>Description:</strong> ${job.description || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p><strong>Status:</strong> <span class="status-badge status-${job.status}">${job.status}</span></p>
+                                <p><strong>Enabled:</strong> <span class="enabled-badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '✓ Enabled' : '✗ Disabled'}</span></p>
+                                <p><strong>Schedule Type:</strong> ${scheduleType.toUpperCase()}</p>
+                                ${scheduleConfig.next_run || scheduleConfig.next_run_time ? `
+                                <p><strong>Next Run:</strong> ${formatTimestamp(scheduleConfig.next_run || scheduleConfig.next_run_time)}</p>
+                                ` : ''}
+                            </div>
+                        </div>
                     </div>
+                    
+                    <div style="margin-bottom: 25px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                        <h3 style="color: #0369a1; margin-bottom: 10px;">⏰ Schedule Configuration</h3>
+                        ${scheduleDetails}
+                        ${scheduleConfig.start_date ? `<p><strong>Start Date:</strong> ${formatTimestamp(scheduleConfig.start_date)}</p>` : ''}
+                        ${scheduleConfig.end_date ? `<p><strong>End Date:</strong> ${formatTimestamp(scheduleConfig.end_date)}</p>` : ''}
+                    </div>
+                    
+                    ${Object.keys(config).length > 0 ? `
+                    <div style="margin-bottom: 25px;">
+                        <h3 style="color: #1f2937; margin-bottom: 10px;">⚙️ Job Configuration</h3>
+                        <pre style="background: #f9fafb; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 0.85em;">${JSON.stringify(config, null, 2)}</pre>
+                    </div>
+                    ` : ''}
                     
                     <div class="execution-list">
                         <h3>Execution History (${data.total_executions} total)</h3>
@@ -703,6 +1033,229 @@
 
         function refreshJobs() {
             loadJobs();
+            loadScheduledJobs();
+        }
+
+        function getJobType(jobId, jobData = null) {
+            // Try to get from jobData first (from API response)
+            if (jobData && jobData.job_type && jobData.job_type !== 'scheduled') {
+                return jobData.job_type;
+            }
+            
+            // Fallback to mapping
+            const jobTypeMap = {
+                'current_price_sync': 'current_price',
+                'base_pe_update': 'base_pe',
+                'market_data_sync_recent': 'market_data',
+                'market_data_sync_full': 'market_data',
+                'financial_data_sync': 'financial_data',
+                'shares_outstanding_sync': 'shares_outstanding'
+            };
+            return jobTypeMap[jobId] || 'unknown';
+        }
+
+        async function loadScheduledJobs() {
+            try {
+                const response = await fetch(`${DATABASE_SERVICE_URL}/sync/jobs`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                scheduledJobsData = data;
+                const scheduledContent = document.getElementById('scheduledJobsContent');
+                
+                let html = '';
+                
+                if (data.scheduled_jobs && data.scheduled_jobs.length > 0) {
+                    html += '<div style="display: grid; gap: 15px;">';
+                    
+                    for (const job of data.scheduled_jobs) {
+                        const jobName = job.name || job.sync_id;
+                        const jobDescription = job.description || job.schedule || 'Manual trigger only';
+                        const jobId = job.sync_id || job.id;
+                        const isRunning = data.active_jobs && data.active_jobs.some(j => j.sync_id && j.sync_id.startsWith(jobId));
+                        const actualJobType = getJobType(jobId, job);
+                        const supportsTicker = actualJobType === 'current_price' || actualJobType === 'base_pe' || actualJobType === 'market_data' || actualJobType === 'financial_data' || actualJobType === 'shares_outstanding';
+                        
+                        html += `
+                            <div style="border: 2px solid ${isRunning ? '#667eea' : '#e5e7eb'}; border-radius: 8px; padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); transition: all 0.3s;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                    <div style="flex: 1;">
+                                        <h3 style="margin: 0 0 5px 0; color: #667eea; font-size: 1.1em;">${jobName}</h3>
+                                        <p style="margin: 0; color: #6b7280; font-size: 0.9em;">${jobDescription}</p>
+                                        ${job.days ? `<p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 0.85em;">📅 Sync last ${job.days} days</p>` : ''}
+                                        ${supportsTicker ? `<p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 0.85em;">💡 Supports ticker selection</p>` : ''}
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+                                        ${supportsTicker ? `
+                                            <div style="display: flex; gap: 5px; align-items: center;">
+                                                <input 
+                                                    type="text" 
+                                                    id="tickerInput_${jobId}" 
+                                                    placeholder="Ticker (optional)"
+                                                    style="padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.85em; width: 100px; text-transform: uppercase;"
+                                                    onkeyup="this.value = this.value.toUpperCase()"
+                                                >
+                                                <button 
+                                                    class="btn btn-primary" 
+                                                    onclick="triggerScheduledJob('${jobId}', document.getElementById('tickerInput_${jobId}').value)"
+                                                    id="triggerBtn_${jobId}"
+                                                    ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
+                                                    style="padding: 8px 16px; font-size: 0.85em;">
+                                                    ${isRunning ? '🔄 Running...' : '▶️ Run'}
+                                                </button>
+                                            </div>
+                                            <button 
+                                                class="btn btn-secondary" 
+                                                onclick="triggerScheduledJob('${jobId}', null)"
+                                                id="triggerAllBtn_${jobId}"
+                                                ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
+                                                style="padding: 6px 12px; font-size: 0.8em; background: #6b7280;">
+                                                ${isRunning ? '⏳' : '🌐 All Stocks'}
+                                            </button>
+                                        ` : `
+                                            <button 
+                                                class="btn btn-primary" 
+                                                onclick="triggerScheduledJob('${jobId}')"
+                                                id="triggerBtn_${jobId}"
+                                                ${isRunning ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}
+                                                style="padding: 10px 20px; font-size: 0.9em;">
+                                                ${isRunning ? '🔄 Running...' : '▶️ Run Now'}
+                                            </button>
+                                        `}
+                                    </div>
+                                </div>
+                                ${isRunning ? `
+                                    <div style="margin-top: 10px; padding: 10px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #667eea;">
+                                        <div style="font-size: 0.85em; color: #667eea;">
+                                            ⏳ Job is currently running...
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                } else {
+                    html = '<div style="text-align: center; padding: 20px; color: #9ca3af;">No scheduled jobs available</div>';
+                }
+                
+                scheduledContent.innerHTML = html;
+            } catch (error) {
+                document.getElementById('scheduledJobsContent').innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #ef4444;">
+                        Error loading scheduled jobs: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function triggerScheduledJob(jobId, ticker = null) {
+            const button = document.getElementById(`triggerBtn_${jobId}`);
+            const triggerAllBtn = document.getElementById(`triggerAllBtn_${jobId}`);
+            if ((!button || button.disabled) && (!triggerAllBtn || triggerAllBtn.disabled)) return;
+            
+            const activeButton = ticker && ticker.trim() ? button : (triggerAllBtn || button);
+            if (!activeButton) {
+                console.error('No button found for job:', jobId);
+                return;
+            }
+            const originalText = activeButton.innerHTML;
+            activeButton.disabled = true;
+            activeButton.innerHTML = '⏳ Starting...';
+            activeButton.style.opacity = '0.5';
+            
+            if (button && button !== activeButton) {
+                button.disabled = true;
+                button.style.opacity = '0.5';
+            }
+            if (triggerAllBtn && triggerAllBtn !== activeButton) {
+                triggerAllBtn.disabled = true;
+                triggerAllBtn.style.opacity = '0.5';
+            }
+            
+            try {
+                let jobData = null;
+                if (scheduledJobsData && scheduledJobsData.scheduled_jobs) {
+                    jobData = scheduledJobsData.scheduled_jobs.find(j => (j.sync_id || j.id) === jobId);
+                } else {
+                    try {
+                        const jobsResponse = await fetch(`${DATABASE_SERVICE_URL}/sync/jobs`);
+                        scheduledJobsData = await jobsResponse.json();
+                        jobData = scheduledJobsData.scheduled_jobs?.find(j => (j.sync_id || j.id) === jobId);
+                    } catch (e) {
+                        console.warn('Could not fetch jobs data:', e);
+                    }
+                }
+                const jobType = getJobType(jobId, jobData);
+                
+                let url = `${DATABASE_SERVICE_URL}/sync/jobs/${jobId}/trigger`;
+                if (ticker && ticker.trim()) {
+                    if (jobType === 'current_price') {
+                        url = `${DATABASE_SERVICE_URL}/sync/current-price?ticker=${ticker.trim().toUpperCase()}`;
+                    } else if (jobType === 'base_pe') {
+                        url = `${DATABASE_SERVICE_URL}/sync/base-pe?ticker=${ticker.trim().toUpperCase()}`;
+                    } else if (jobType === 'market_data') {
+                        const days = jobData?.days || 7;
+                        url = `${DATABASE_SERVICE_URL}/sync/market_data?ticker=${ticker.trim().toUpperCase()}&days=${days}`;
+                    } else if (jobType === 'financial_data') {
+                        url = `${DATABASE_SERVICE_URL}/sync/financial_data?ticker=${ticker.trim().toUpperCase()}`;
+                    } else if (jobType === 'shares_outstanding') {
+                        url = `${DATABASE_SERVICE_URL}/sync/shares_outstanding?ticker=${ticker.trim().toUpperCase()}`;
+                    }
+                }
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+                    throw new Error(errorData.detail || 'Failed to trigger job');
+                }
+                
+                const data = await response.json();
+                
+                const successMsg = document.createElement('div');
+                successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000;';
+                successMsg.innerHTML = `✓ ${data.message || 'Job triggered successfully'}`;
+                document.body.appendChild(successMsg);
+                
+                setTimeout(() => {
+                    successMsg.remove();
+                }, 3000);
+                
+                setTimeout(() => {
+                    loadJobs();
+                    loadScheduledJobs();
+                }, 1000);
+                
+            } catch (error) {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    button.style.opacity = '1';
+                }
+                if (triggerAllBtn) {
+                    triggerAllBtn.disabled = false;
+                    triggerAllBtn.innerHTML = originalText;
+                    triggerAllBtn.style.opacity = '1';
+                }
+                
+                const errorMsg = document.createElement('div');
+                errorMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ef4444; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000;';
+                errorMsg.innerHTML = `✗ Error: ${error.message || 'Failed to trigger job'}`;
+                document.body.appendChild(errorMsg);
+                
+                setTimeout(() => {
+                    errorMsg.remove();
+                }, 5000);
+            }
         }
 
         function formatTimestamp(timestamp) {
@@ -730,4 +1283,5 @@
     </script>
 </body>
 </html>
+
 
