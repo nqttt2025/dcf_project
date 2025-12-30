@@ -19,3 +19,4 @@ data/results/*.json
 data/results/*.text
 data/cache/
 data/cache/*.json
+config/ssl/

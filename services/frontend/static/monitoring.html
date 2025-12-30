@@ -372,19 +372,24 @@
             contentEl.style.display = 'none';
 
             try {
-                // Get architecture data
-                const archResponse = await fetch('/api/architecture');
-                const archData = await archResponse.json();
+                // Get monitoring data (architecture is defined statically)
+                let monitoringData = {};
+                try {
+                    const monitoringResponse = await fetch('/api/monitoring');
+                    monitoringData = await monitoringResponse.json();
+                } catch (e) {
+                    console.warn('Monitoring API not available, using default data');
+                    monitoringData = getDefaultMonitoringData();
+                }
 
-                // Get monitoring data
-                const monitoringResponse = await fetch('/api/monitoring');
-                const monitoringData = await monitoringResponse.json();
+                // Get architecture data (static definition)
+                const archData = getArchitectureData();
 
                 // Update status grid
                 updateStatusGrid(monitoringData);
 
-                // Update architecture diagram
-                updateArchitectureDiagram(archData.architecture);
+                // Update architecture diagram with monitoring data for request tracking
+                updateArchitectureDiagram(archData.architecture, monitoringData);
 
                 // Update requests list
                 updateRequestsList(monitoringData);
@@ -397,6 +402,245 @@
             } finally {
                 loadingEl.style.display = 'none';
             }
+        }
+
+        function getArchitectureData() {
+            return {
+                architecture: {
+                    services: [
+                        {
+                            name: 'Frontend',
+                            type: 'nginx',
+                            port: '8081',
+                            description: 'Nginx serving static files and proxying API requests',
+                            dependencies: ['Gateway'],
+                            requestPaths: [
+                                { path: 'Client → Frontend', method: 'GET', endpoint: '/static/*' },
+                                { path: 'Client → Frontend', method: 'GET', endpoint: '/api/*' }
+                            ]
+                        },
+                        {
+                            name: 'Gateway',
+                            type: 'fastapi',
+                            port: '8000',
+                            description: 'API Gateway - Routes requests to microservices (HTTPS)',
+                            dependencies: ['DCF Service', 'Stock Service', 'Database Service'],
+                            requestPaths: [
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/health' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}/config' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}/status' },
+                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/dcf/analyze/{ticker}' }
+                            ]
+                        },
+                        {
+                            name: 'DCF Service',
+                            type: 'fastapi',
+                            port: '8001',
+                            description: 'Handles DCF analysis calculations',
+                            dependencies: ['PostgreSQL', 'Redis'],
+                            requestPaths: [
+                                { path: 'Gateway → DCF Service', method: 'GET', endpoint: '/health' },
+                                { path: 'Gateway → DCF Service', method: 'POST', endpoint: '/analyze/{ticker}' },
+                                { path: 'Gateway → DCF Service', method: 'GET', endpoint: '/results/{ticker}' },
+                                { path: 'DCF Service → PostgreSQL', method: 'SQL', endpoint: 'SELECT/INSERT/UPDATE' },
+                                { path: 'DCF Service → Redis', method: 'SET/GET', endpoint: 'Cache operations' }
+                            ]
+                        },
+                        {
+                            name: 'Stock Service',
+                            type: 'fastapi',
+                            port: '8002',
+                            description: 'Manages stock data and information',
+                            dependencies: ['PostgreSQL', 'Redis'],
+                            requestPaths: [
+                                { path: 'Gateway → Stock Service', method: 'GET', endpoint: '/stocks' },
+                                { path: 'Gateway → Stock Service', method: 'GET', endpoint: '/stocks/{ticker}' },
+                                { path: 'Gateway → Stock Service', method: 'GET', endpoint: '/stocks/{ticker}/config' },
+                                { path: 'Gateway → Stock Service', method: 'GET', endpoint: '/stocks/{ticker}/status' },
+                                { path: 'Stock Service → PostgreSQL', method: 'SQL', endpoint: 'SELECT/INSERT/UPDATE' },
+                                { path: 'Stock Service → Redis', method: 'SET/GET', endpoint: 'Cache operations' }
+                            ]
+                        },
+                        {
+                            name: 'Database Service',
+                            type: 'fastapi',
+                            port: '8003',
+                            description: 'Manages database operations and sync',
+                            dependencies: ['PostgreSQL', 'Redis'],
+                            requestPaths: [
+                                { path: 'Gateway → Database Service', method: 'GET', endpoint: '/sync' },
+                                { path: 'Gateway → Database Service', method: 'POST', endpoint: '/migrate' },
+                                { path: 'Database Service → PostgreSQL', method: 'SQL', endpoint: 'Database operations' },
+                                { path: 'Database Service → Redis', method: 'SET/GET', endpoint: 'Cache operations' }
+                            ]
+                        },
+                        {
+                            name: 'PostgreSQL',
+                            type: 'database',
+                            port: '5432',
+                            description: 'PostgreSQL database for persistent storage',
+                            dependencies: [],
+                            requestPaths: [
+                                { path: 'DCF Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' },
+                                { path: 'Stock Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' },
+                                { path: 'Database Service → PostgreSQL', method: 'SQL', endpoint: 'Query/Transaction' }
+                            ]
+                        },
+                        {
+                            name: 'Redis',
+                            type: 'cache',
+                            port: '6379',
+                            description: 'Redis cache for session and temporary data',
+                            dependencies: [],
+                            requestPaths: [
+                                { path: 'DCF Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
+                                { path: 'Stock Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
+                                { path: 'Database Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' }
+                            ]
+                        }
+                    ],
+                    connections: [
+                        {
+                            id: 'frontend-gateway',
+                            from: 'Frontend',
+                            to: 'Gateway',
+                            protocol: 'HTTPS',
+                            endpoints: ['/api/*', '/api/health'],
+                            requestPaths: [
+                                'Frontend → Gateway: GET /api/health',
+                                'Frontend → Gateway: GET /api/stocks',
+                                'Frontend → Gateway: GET /api/stocks/{ticker}',
+                                'Frontend → Gateway: GET /api/stocks/{ticker}/config',
+                                'Frontend → Gateway: GET /api/stocks/{ticker}/status',
+                                'Frontend → Gateway: POST /api/dcf/analyze/{ticker}'
+                            ]
+                        },
+                        {
+                            id: 'gateway-dcf',
+                            from: 'Gateway',
+                            to: 'DCF Service',
+                            protocol: 'HTTP',
+                            endpoints: ['/analyze/{ticker}', '/results/{ticker}', '/health'],
+                            requestPaths: [
+                                'Gateway → DCF Service: POST /analyze/{ticker}',
+                                'Gateway → DCF Service: GET /results/{ticker}',
+                                'Gateway → DCF Service: GET /health'
+                            ]
+                        },
+                        {
+                            id: 'gateway-stock',
+                            from: 'Gateway',
+                            to: 'Stock Service',
+                            protocol: 'HTTP',
+                            endpoints: ['/stocks', '/stocks/{ticker}', '/stocks/{ticker}/config', '/stocks/{ticker}/status'],
+                            requestPaths: [
+                                'Gateway → Stock Service: GET /stocks',
+                                'Gateway → Stock Service: GET /stocks/{ticker}',
+                                'Gateway → Stock Service: GET /stocks/{ticker}/config',
+                                'Gateway → Stock Service: GET /stocks/{ticker}/status'
+                            ]
+                        },
+                        {
+                            id: 'gateway-database',
+                            from: 'Gateway',
+                            to: 'Database Service',
+                            protocol: 'HTTP',
+                            endpoints: ['/sync', '/migrate'],
+                            requestPaths: [
+                                'Gateway → Database Service: GET /sync',
+                                'Gateway → Database Service: POST /migrate'
+                            ]
+                        },
+                        {
+                            id: 'dcf-postgres',
+                            from: 'DCF Service',
+                            to: 'PostgreSQL',
+                            protocol: 'PostgreSQL',
+                            endpoints: ['Database operations'],
+                            requestPaths: [
+                                'DCF Service → PostgreSQL: SQL SELECT',
+                                'DCF Service → PostgreSQL: SQL INSERT',
+                                'DCF Service → PostgreSQL: SQL UPDATE'
+                            ]
+                        },
+                        {
+                            id: 'dcf-redis',
+                            from: 'DCF Service',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Cache operations'],
+                            requestPaths: [
+                                'DCF Service → Redis: SET cache',
+                                'DCF Service → Redis: GET cache',
+                                'DCF Service → Redis: DEL cache'
+                            ]
+                        },
+                        {
+                            id: 'stock-postgres',
+                            from: 'Stock Service',
+                            to: 'PostgreSQL',
+                            protocol: 'PostgreSQL',
+                            endpoints: ['Database operations'],
+                            requestPaths: [
+                                'Stock Service → PostgreSQL: SQL SELECT',
+                                'Stock Service → PostgreSQL: SQL INSERT',
+                                'Stock Service → PostgreSQL: SQL UPDATE'
+                            ]
+                        },
+                        {
+                            id: 'stock-redis',
+                            from: 'Stock Service',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Cache operations'],
+                            requestPaths: [
+                                'Stock Service → Redis: SET cache',
+                                'Stock Service → Redis: GET cache',
+                                'Stock Service → Redis: DEL cache'
+                            ]
+                        },
+                        {
+                            id: 'database-postgres',
+                            from: 'Database Service',
+                            to: 'PostgreSQL',
+                            protocol: 'PostgreSQL',
+                            endpoints: ['Database operations'],
+                            requestPaths: [
+                                'Database Service → PostgreSQL: SQL SELECT',
+                                'Database Service → PostgreSQL: SQL INSERT',
+                                'Database Service → PostgreSQL: SQL UPDATE'
+                            ]
+                        },
+                        {
+                            id: 'database-redis',
+                            from: 'Database Service',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Cache operations'],
+                            requestPaths: [
+                                'Database Service → Redis: SET cache',
+                                'Database Service → Redis: GET cache',
+                                'Database Service → Redis: DEL cache'
+                            ]
+                        }
+                    ]
+                }
+            };
+        }
+
+        function getDefaultMonitoringData() {
+            return {
+                health: {
+                    status: 'unknown'
+                },
+                services: {
+                    dcf: { status: 'unknown', running_analyses: 0, analyses: [] },
+                    stock: { status: 'unknown' },
+                    database: { status: 'unknown' }
+                }
+            };
         }
 
         function updateStatusGrid(data) {
@@ -440,26 +684,56 @@
             `).join('');
         }
 
-        function updateArchitectureDiagram(architecture) {
+        function updateArchitectureDiagram(architecture, monitoringData = {}) {
             const container = document.getElementById('networkDiagram');
+            
+            // Extract active requests for highlighting
+            const activeRequests = monitoringData.services?.dcf?.analyses || [];
+            const activeConnections = new Set();
+            
+            // Map active requests to connections based on request type
+            activeRequests.forEach(req => {
+                if (req.status === 'running' || req.status === 'processing') {
+                    // Request flows: Frontend → Gateway → DCF Service → PostgreSQL/Redis
+                    activeConnections.add('frontend-gateway');
+                    activeConnections.add('gateway-dcf');
+                    activeConnections.add('dcf-postgres');
+                    activeConnections.add('dcf-redis');
+                }
+            });
+            
+            // Also check for stock service requests
+            if (monitoringData.services?.stock?.active_requests) {
+                activeConnections.add('frontend-gateway');
+                activeConnections.add('gateway-stock');
+                activeConnections.add('stock-postgres');
+                activeConnections.add('stock-redis');
+            }
             const legendEl = document.getElementById('legend');
             
             // Define service groups and styling with better colors
             const serviceGroups = {
-                'frontend': { color: '#10b981', shape: 'box', icon: '🌐', label: 'Frontend' },
-                'api': { color: '#3b82f6', shape: 'ellipse', icon: '🚪', label: 'API Gateway' },
-                'service': { color: '#6366f1', shape: 'ellipse', icon: '⚙️', label: 'Services' },
-                'database': { color: '#8b5cf6', shape: 'database', icon: '🗄️', label: 'Database' },
-                'cache': { color: '#f59e0b', shape: 'diamond', icon: '⚡', label: 'Cache' }
+                'frontend': { color: '#10b981', shape: 'box', icon: '🌐', label: 'Frontend (Nginx)' },
+                'api': { color: '#3b82f6', shape: 'ellipse', icon: '🚪', label: 'API Gateway (HTTPS)' },
+                'service': { color: '#6366f1', shape: 'ellipse', icon: '⚙️', label: 'Microservices' },
+                'database': { color: '#8b5cf6', shape: 'database', icon: '🗄️', label: 'PostgreSQL' },
+                'cache': { color: '#f59e0b', shape: 'diamond', icon: '⚡', label: 'Redis Cache' }
             };
 
-            // Update legend
-            legendEl.innerHTML = Object.values(serviceGroups).map(group => `
-                <div class="legend-item">
-                    <div class="legend-color" style="background: ${group.color};"></div>
-                    <span>${group.icon} ${group.label}</span>
+            // Update legend with connection status
+            const activeCount = activeConnections.size;
+            legendEl.innerHTML = `
+                ${Object.values(serviceGroups).map(group => `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: ${group.color};"></div>
+                        <span>${group.icon} ${group.label}</span>
+                    </div>
+                `).join('')}
+                <div class="legend-item" style="border-left: 3px solid #ef4444; padding-left: 8px;">
+                    <div class="legend-color" style="background: #ef4444; width: 20px; height: 3px;"></div>
+                    <span>⚡ Active Request (${activeCount})</span>
                 </div>
-            `).join('');
+            `;
 
             // Create nodes with better styling and grouping
             const nodes = architecture.services.map(service => {
@@ -473,10 +747,23 @@
                 else if (['DCF Service', 'Stock Service', 'Database Service'].includes(service.name)) level = 2;
                 else if (['PostgreSQL', 'Redis'].includes(service.name)) level = 3;
                 
+                // Special handling for Gateway to show HTTPS
+                let label = `${style.icon}\n${service.name}\n:${service.port}`;
+                if (service.name === 'Gateway') {
+                    label = `${style.icon}\n${service.name}\n:${service.port}\n🔒 HTTPS`;
+                }
+                
+                // Build detailed tooltip with request paths
+                const requestPathsText = service.requestPaths 
+                    ? service.requestPaths.map(rp => `${rp.path}: ${rp.method} ${rp.endpoint}`).join('\n')
+                    : 'No request paths defined';
+                
+                const title = `${service.name}\n\n${service.description}\n\nPort: ${service.port}\n\nDependencies: ${service.dependencies.join(', ') || 'None'}\n\nRequest Paths:\n${requestPathsText}`;
+                
                 return {
                     id: service.name,
-                    label: `${style.icon}\n${service.name}\n:${service.port}`,
-                    title: `${service.name}\n\n${service.description}\n\nPort: ${service.port}\n\nDependencies: ${service.dependencies.join(', ') || 'None'}`,
+                    label: label,
+                    title: title,
                     color: {
                         background: style.color,
                         border: darkenColor(style.color, 25),
@@ -517,19 +804,34 @@
                 };
             });
 
-            // Create edges with better styling
+            // Create edges with better styling and request tracking
             const edges = architecture.connections.map((conn, index) => {
                 const protocolColors = {
+                    'HTTPS': '#10b981',
                     'HTTP': '#3b82f6',
                     'PostgreSQL': '#8b5cf6',
                     'Redis': '#f59e0b'
                 };
                 
+                // Make HTTPS connections thicker and more prominent
+                const isHTTPS = conn.protocol === 'HTTPS';
+                const isActive = activeConnections.has(conn.id);
+                const edgeWidth = isHTTPS ? (isActive ? 5 : 4) : (isActive ? 4 : 3);
+                const edgeLabel = isHTTPS ? `🔒 ${conn.protocol}` : conn.protocol;
+                
+                // Build detailed tooltip with request paths
+                const requestPathsText = conn.requestPaths 
+                    ? conn.requestPaths.join('\n')
+                    : 'No request paths';
+                
+                const title = `${conn.protocol} Connection\n\nFrom: ${conn.from}\nTo: ${conn.to}\n\nEndpoints:\n${conn.endpoints?.join('\n') || 'N/A'}\n\nRequest Paths:\n${requestPathsText}${isActive ? '\n\n⚡ ACTIVE REQUEST' : ''}`;
+                
                 return {
+                    id: conn.id,
                     from: conn.from,
                     to: conn.to,
-                    label: conn.protocol,
-                    title: conn.endpoints ? `Endpoints: ${conn.endpoints.join(', ')}` : '',
+                    label: edgeLabel,
+                    title: title,
                     arrows: {
                         to: {
                             enabled: true,
@@ -538,26 +840,32 @@
                         }
                     },
                     color: {
-                        color: protocolColors[conn.protocol] || '#6b7280',
-                        highlight: lightenColor(protocolColors[conn.protocol] || '#6b7280', 20),
-                        hover: protocolColors[conn.protocol] || '#6b7280'
+                        color: isActive ? '#ef4444' : (protocolColors[conn.protocol] || '#6b7280'),
+                        highlight: isActive ? '#dc2626' : lightenColor(protocolColors[conn.protocol] || '#6b7280', 20),
+                        hover: isActive ? '#ef4444' : (protocolColors[conn.protocol] || '#6b7280')
                     },
-                    width: 3,
+                    width: edgeWidth,
+                    dashes: isHTTPS ? false : (isActive ? [5, 5] : false), // Dashed for active non-HTTPS
+                    animation: isActive ? {
+                        duration: 1000,
+                        easingFunction: 'linear'
+                    } : undefined,
                     smooth: {
                         type: 'continuous',
                         roundness: 0.5
                     },
                     font: {
-                        size: 11,
+                        size: isActive ? 12 : 11,
                         align: 'middle',
-                        color: '#374151',
+                        color: isActive ? '#ef4444' : '#374151',
                         background: '#ffffff',
                         strokeWidth: 2,
-                        strokeColor: '#ffffff'
+                        strokeColor: '#ffffff',
+                        bold: isActive
                     },
-                    labelHighlightBold: false,
-                    selectionWidth: 4,
-                    hoverWidth: 4
+                    labelHighlightBold: isActive,
+                    selectionWidth: isActive ? 5 : 4,
+                    hoverWidth: isActive ? 5 : 4
                 };
             });
 
@@ -650,6 +958,65 @@
                     }
                 }
             });
+        }
+
+        function showRequestFlowDetails(edge, architecture) {
+            // Find connection details
+            const conn = architecture.connections.find(c => c.id === edge.id);
+            if (!conn) return;
+            
+            // Create or update request flow panel
+            let flowPanel = document.getElementById('requestFlowPanel');
+            if (!flowPanel) {
+                flowPanel = document.createElement('div');
+                flowPanel.id = 'requestFlowPanel';
+                flowPanel.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    max-width: 400px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    z-index: 1000;
+                    display: none;
+                `;
+                document.body.appendChild(flowPanel);
+            }
+            
+            const requestPathsHtml = conn.requestPaths 
+                ? conn.requestPaths.map(rp => `<div style="padding: 5px; margin: 5px 0; background: #f3f4f6; border-radius: 5px; font-size: 0.9em;">${rp}</div>`).join('')
+                : '<div style="color: #999;">No request paths defined</div>';
+            
+            flowPanel.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">Request Flow Details</h3>
+                    <button onclick="document.getElementById('requestFlowPanel').style.display='none'" 
+                            style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">✕</button>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>Connection:</strong> ${conn.from} → ${conn.to}
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>Protocol:</strong> ${conn.protocol}
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>Endpoints:</strong>
+                    <div style="margin-top: 5px;">
+                        ${conn.endpoints?.map(ep => `<div style="padding: 3px; margin: 3px 0; background: #e5e7eb; border-radius: 3px; font-size: 0.85em;">${ep}</div>`).join('') || 'N/A'}
+                    </div>
+                </div>
+                <div>
+                    <strong>Request Paths:</strong>
+                    <div style="margin-top: 10px;">
+                        ${requestPathsHtml}
+                    </div>
+                </div>
+            `;
+            flowPanel.style.display = 'block';
         }
 
         function getServiceGroup(type, name) {

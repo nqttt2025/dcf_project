@@ -19,9 +19,13 @@ COPY src /app/src
 # Copy service code
 COPY services/gateway/main.py /app/main.py
 
+# Copy SSL certificates
+COPY config/ssl/gateway.key /app/ssl/gateway.key
+COPY config/ssl/gateway.crt /app/ssl/gateway.crt
+
 LABEL version="${VERSION}"
 LABEL maintainer="DCF Project"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "/app/ssl/gateway.key", "--ssl-certfile", "/app/ssl/gateway.crt"]

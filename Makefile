@@ -164,6 +164,49 @@ web-install:
 	@./scripts/utils/web.sh install
 
 # ============================================================================
+# Ngrok Commands
+# ============================================================================
+
+ngrok:
+	@if [ -z "$(PORT)" ]; then \
+		./scripts/start_ngrok.sh 8081; \
+	else \
+		./scripts/start_ngrok.sh $(PORT); \
+	fi
+
+ngrok-start:
+	@if [ -z "$(PORT)" ]; then \
+		./scripts/start_ngrok.sh 8081; \
+	else \
+		./scripts/start_ngrok.sh $(PORT); \
+	fi
+
+ngrok-stop:
+	@if [ -z "$(PORT)" ]; then \
+		./scripts/stop_ngrok.sh 8081; \
+	else \
+		./scripts/stop_ngrok.sh $(PORT); \
+	fi
+
+ngrok-status:
+	@if [ -z "$(PORT)" ]; then \
+		./scripts/ngrok_status.sh 8081; \
+	else \
+		./scripts/ngrok_status.sh $(PORT); \
+	fi
+
+ngrok-restart:
+	@if [ -z "$(PORT)" ]; then \
+		./scripts/stop_ngrok.sh 8081; \
+		sleep 2; \
+		./scripts/start_ngrok.sh 8081; \
+	else \
+		./scripts/stop_ngrok.sh $(PORT); \
+		sleep 2; \
+		./scripts/start_ngrok.sh $(PORT); \
+	fi
+
+# ============================================================================
 # Docker Commands
 # ============================================================================
 
@@ -405,6 +448,16 @@ help:
 	@echo "  make web          - Start web service (development, http://localhost:5000)"
 	@echo "  make web-install  - Install web service dependencies"
 	@echo ""
+	@echo "Ngrok (Expose localhost to internet):"
+	@echo "  make ngrok [PORT=<port>]  - Start ngrok tunnel (default: port 8081)"
+	@echo "  make ngrok-start [PORT=<port>] - Start ngrok tunnel"
+	@echo "  make ngrok-stop [PORT=<port>]   - Stop ngrok tunnel"
+	@echo "  make ngrok-status [PORT=<port>] - Show ngrok status and URL"
+	@echo "  make ngrok-restart [PORT=<port>] - Restart ngrok tunnel"
+	@echo "  Examples:"
+	@echo "    make ngrok              - Expose port 8081"
+	@echo "    make ngrok PORT=8000   - Expose port 8000"
+	@echo ""
 	@echo "  make docker-build      - Build Docker images (with auto cleanup)"
 	@echo "  make docker-rebuild    - Rebuild from scratch (with cleanup)"
 	@echo "  make docker-up         - Start Docker containers (http://localhost:8080)"
@@ -443,4 +496,4 @@ help:
 	@echo "Note: Most commands delegate to scripts/ for better maintainability."
 	@echo "      See scripts/*.sh for implementation details."
 
-.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python test-makefile test-makefile-commands test-makefile-functionality test-makefile-all lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
+.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python test-makefile test-makefile-commands test-makefile-functionality test-makefile-all lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install ngrok ngrok-start ngrok-stop ngrok-status ngrok-restart docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
