@@ -14,6 +14,7 @@ sys.path.insert(0, str(project_root))
 from fastapi import FastAPI, HTTPException
 import json
 import os
+import logging
 
 # Try to import httpx for syncing with DCF service
 try:
@@ -26,6 +27,10 @@ except ImportError:
 from services.common import create_health_response
 
 from src.utils.result_manager import get_result_manager
+
+# Setup service-specific logger với rotation và tối ưu hiệu năng
+from src.utils.service_logger import setup_service_logger
+logger = setup_service_logger('stock', level=logging.INFO)
 
 app = FastAPI(title="Stock Service")
 
@@ -51,9 +56,10 @@ running_processes = {}
 def sync_running_status():
     """Sync running status with Redis"""
     try:
-        # Try Redis first
+        # Try Redis first with timeout
         from src.utils.redis_client import get_redis_client
         redis_client = get_redis_client()
+        # Use a quick timeout to avoid blocking
         redis_analyses = redis_client.get_all_running_analyses()
         
         # Update running_processes from Redis
@@ -67,11 +73,12 @@ def sync_running_status():
                     'progress_percent': analysis_info.get('progress_percent')
                 }
     except Exception as e:
-        # Fallback to HTTP sync if Redis fails
+        # Fallback to HTTP sync if Redis fails - use shorter timeout
         if HAS_HTTPX:
             try:
                 dcf_service_url = os.getenv('DCF_SERVICE_URL', 'http://dcf:8001')
-                response = httpx.get(f"{dcf_service_url}/status", timeout=5.0)
+                # Use shorter timeout to avoid blocking the request
+                response = httpx.get(f"{dcf_service_url}/status", timeout=2.0)
                 if response.status_code == 200:
                     dcf_status = response.json()
                     # Update running_processes from DCF service
@@ -84,6 +91,7 @@ def sync_running_status():
                                 'progress_percent': analysis_info.get('progress_percent')
                             }
             except:
+                # If sync fails, just continue with empty running_processes
                 pass
 
 @app.get("/")

@@ -395,11 +395,88 @@
 
         #networkDiagram {
             width: 100%;
+            min-height: 700px;
             height: 700px;
             border: 2px solid #e5e7eb;
             border-radius: 10px;
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+
+        #serviceDetailsPanel {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .service-detail-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .service-detail-section h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 1em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .service-detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .service-detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .service-detail-label {
+            color: #6b7280;
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+
+        .service-detail-value {
+            color: #333;
+            font-weight: 600;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-word;
+        }
+
+        .endpoint-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+
+        .endpoint-list li {
+            padding: 6px 12px;
+            margin: 5px 0;
+            background: #f3f4f6;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #374151;
+            border-left: 3px solid #667eea;
         }
 
         /* Requests List */
@@ -633,6 +710,88 @@
             background: #059669;
         }
 
+        /* Logs Viewer Styles */
+        .log-viewer {
+            margin-bottom: 20px;
+        }
+
+        .log-viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .log-viewer-header:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .log-viewer-header h3 {
+            margin: 0;
+            font-size: 1em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .log-viewer-content {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 0 0 8px 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.6;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .log-line {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-line:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .log-line.error {
+            color: #f87171;
+        }
+
+        .log-line.warning {
+            color: #fbbf24;
+        }
+
+        .log-line.info {
+            color: #60a5fa;
+        }
+
+        .log-line.debug {
+            color: #a78bfa;
+        }
+
+        .log-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .log-empty {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+            font-style: italic;
+        }
+
         @media (max-width: 768px) {
             .status-grid {
                 grid-template-columns: 1fr;
@@ -672,6 +831,9 @@
             <button class="tab-btn" onclick="switchTab('health')">
                 <span>🏥</span> Health Status
             </button>
+            <button class="tab-btn" onclick="switchTab('logs')">
+                <span>📋</span> Logs
+            </button>
         </div>
 
         <div class="controls">
@@ -693,7 +855,7 @@
         <div id="overview-tab" class="tab-content active">
             <div id="summaryCard" class="summary-card" style="display: none;"></div>
             <div class="card" id="generalInfoCard" style="display: none; margin-bottom: 20px;">
-                <h2>ℹ️ Thông tin chung</h2>
+                <h2>ℹ️ General Information</h2>
                 <div id="generalInfoContent"></div>
             </div>
             <div class="status-grid" id="overviewStatusGrid" style="display: none;"></div>
@@ -703,18 +865,26 @@
         <div id="architecture-tab" class="tab-content">
             <div class="main-content">
                 <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px;">
                         <h2 style="margin: 0;">📊 Architecture Diagram</h2>
                         <div id="legend" style="display: flex; gap: 15px; font-size: 0.85em; flex-wrap: wrap;"></div>
                     </div>
                     <div id="networkDiagram"></div>
+                    <!-- Service Details Panel -->
+                    <div id="serviceDetailsPanel" style="display: none; margin-top: 20px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 2px solid #e5e7eb;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 id="serviceDetailsTitle" style="margin: 0; color: #333; font-size: 1.2em;"></h3>
+                            <button onclick="closeServiceDetails()" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">✕ Close</button>
+                </div>
+                        <div id="serviceDetailsContent"></div>
+                    </div>
                 </div>
                 <div class="card">
                     <h2>🔄 Active Requests</h2>
                     <div id="requestsList" class="requests-list">
                         <div class="empty-state">
                             <div class="empty-state-icon">⏳</div>
-                            <p>Không có request nào đang xử lý</p>
+                            <p>No active requests</p>
                         </div>
                     </div>
                 </div>
@@ -725,6 +895,36 @@
         <div id="health-tab" class="tab-content">
             <div id="healthSummaryCard" class="summary-card" style="display: none;"></div>
             <div class="status-grid" id="healthStatusGrid" style="display: none;"></div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs-tab" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                    <h2 style="margin: 0;">📋 Service Logs</h2>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <select id="logServiceSelect" style="padding: 8px 12px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
+                            <option value="">All Services</option>
+                            <option value="gateway">Gateway</option>
+                            <option value="dcf">DCF Service</option>
+                            <option value="stock">Stock Service</option>
+                            <option value="database">Database Service</option>
+                            <option value="frontend">Frontend</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="redis">Redis</option>
+                        </select>
+                        <input type="number" id="logLinesInput" value="100" min="10" max="1000" step="10" style="padding: 8px 12px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 0.9em; width: 100px;">
+                        <button class="btn" onclick="loadLogs()">
+                            <span>🔄</span> Refresh Logs
+                        </button>
+                        <div class="auto-refresh">
+                            <input type="checkbox" id="autoRefreshLogs" onchange="toggleAutoRefreshLogs()">
+                            <label for="autoRefreshLogs">Auto-refresh (5s)</label>
+                        </div>
+                    </div>
+                </div>
+                <div id="logsContainer"></div>
+            </div>
         </div>
 
         <div id="loading" class="loading">
@@ -745,10 +945,13 @@
 
         function switchTab(tabName) {
             currentTab = tabName;
+            // Update URL hash without triggering page reload
+            window.history.pushState(null, '', `#${tabName}`);
+            
             // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach((btn, index) => {
                 btn.classList.remove('active');
-                const tabNames = ['overview', 'architecture', 'health'];
+                const tabNames = ['overview', 'architecture', 'health', 'logs'];
                 if (tabNames[index] === tabName) {
                     btn.classList.add('active');
                 }
@@ -762,7 +965,29 @@
             if (tabName === 'architecture' && !network) {
                 refreshData();
             }
+            if (tabName === 'logs') {
+                loadLogs();
+            }
         }
+        
+        // Handle hash change and initial load
+        function handleHashChange() {
+            const hash = window.location.hash.substring(1) || 'overview';
+            const validTabs = ['overview', 'architecture', 'health', 'logs'];
+            if (validTabs.includes(hash)) {
+                switchTab(hash);
+            } else {
+                switchTab('overview');
+            }
+        }
+        
+        // Listen for hash changes
+        window.addEventListener('hashchange', handleHashChange);
+        
+        // Initialize tab from hash on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            handleHashChange();
+        });
 
         async function refreshData() {
             const loadingEl = document.getElementById('loading');
@@ -819,7 +1044,13 @@
                     <span style="font-size: 0.85em;">Total response time: ${healthData.totalResponseTime}ms</span>
                 `;
             } catch (error) {
-                errorEl.textContent = `Error loading data: ${error.message}`;
+                // Don't show technical error messages to users
+                const errorMsg = error.message || 'Unknown error';
+                if (errorMsg.includes('JSON') || errorMsg.includes('Unexpected token')) {
+                    errorEl.textContent = 'Unable to load data. Please check if services are running.';
+                } else {
+                    errorEl.textContent = 'Unable to load data. Please try again later.';
+                }
                 errorEl.style.display = 'block';
                 console.error('Data loading error:', error);
             } finally {
@@ -911,86 +1142,138 @@
             const databaseStatus = services.database?.status || 'unknown';
             
             generalInfoContent.innerHTML = `
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-                    <div style="padding: 15px; background: #f9fafb; border-radius: 8px;">
-                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1em; display: flex; align-items: center; gap: 8px;">
-                            <span>🚪</span> Gateway Service
-                        </h3>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <p style="margin: 5px 0;"><strong>Service:</strong> <span style="color: #667eea;">${gatewayInfo}</span></p>
-                            <p style="margin: 5px 0;"><strong>Version:</strong> <span style="color: #667eea;">${gatewayVersion}</span></p>
-                            <p style="margin: 5px 0;"><strong>Status:</strong> 
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <!-- Gateway Service Card -->
+                    <div class="info-card" style="padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
+                            <span style="font-size: 1.5em;">🚪</span>
+                            <h3 style="margin: 0; color: #1f2937; font-size: 1.1em; font-weight: 600;">Gateway Service</h3>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Service Name:</span>
+                                <span style="color: #667eea; font-weight: 600;">${gatewayInfo}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Version:</span>
+                                <span style="color: #667eea; font-weight: 600;">${gatewayVersion}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Status:</span>
                                 <span class="status-badge ${systemStatus === 'healthy' ? 'healthy' : systemStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
                                     ${systemStatus.toUpperCase()}
                                 </span>
-                            </p>
-                            <p style="margin: 5px 0;"><strong>Response Time:</strong> <span style="color: #667eea;">${totalResponseTime}ms</span></p>
-                            <p style="margin: 5px 0;"><strong>Last Check:</strong> <span style="color: #667eea;">${gatewayTimestamp}</span></p>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Response Time:</span>
+                                <span style="color: #667eea; font-weight: 600;">${totalResponseTime}ms</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Last Check:</span>
+                                <span style="color: #9ca3af; font-size: 0.85em;">${gatewayTimestamp}</span>
+                            </div>
                         </div>
                     </div>
                     
-                    <div style="padding: 15px; background: #f9fafb; border-radius: 8px;">
-                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1em; display: flex; align-items: center; gap: 8px;">
-                            <span>🗄️</span> Database
-                        </h3>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <p style="margin: 5px 0;"><strong>Database:</strong> <span style="color: #667eea;">${dbName}</span></p>
-                            <p style="margin: 5px 0;"><strong>Version:</strong> <span style="color: #667eea;">${dbVersion.substring(0, 30)}...</span></p>
-                            <p style="margin: 5px 0;"><strong>Status:</strong> 
+                    <!-- Database Card -->
+                    <div class="info-card" style="padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
+                            <span style="font-size: 1.5em;">🗄️</span>
+                            <h3 style="margin: 0; color: #1f2937; font-size: 1.1em; font-weight: 600;">Database</h3>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Database Name:</span>
+                                <span style="color: #667eea; font-weight: 600;">${dbName}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Version:</span>
+                                <span style="color: #667eea; font-weight: 600; font-size: 0.85em;">${dbVersion.substring(0, 25)}...</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Connection:</span>
                                 <span class="status-badge ${dbConnected ? 'healthy' : 'unhealthy'}">
                                     ${dbConnected ? 'CONNECTED' : 'DISCONNECTED'}
                                 </span>
-                            </p>
-                            <p style="margin: 5px 0;"><strong>Active Connections:</strong> <span style="color: #667eea;">${dbConnections}</span></p>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Active Connections:</span>
+                                <span style="color: #667eea; font-weight: 600;">${dbConnections}</span>
+                            </div>
                         </div>
                     </div>
                     
-                    <div style="padding: 15px; background: #f9fafb; border-radius: 8px;">
-                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1em; display: flex; align-items: center; gap: 8px;">
-                            <span>⚡</span> Redis Cache
-                        </h3>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <p style="margin: 5px 0;"><strong>Status:</strong> 
+                    <!-- Redis Cache Card -->
+                    <div class="info-card" style="padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
+                            <span style="font-size: 1.5em;">⚡</span>
+                            <h3 style="margin: 0; color: #1f2937; font-size: 1.1em; font-weight: 600;">Redis Cache</h3>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Connection:</span>
                                 <span class="status-badge ${redisConnected ? 'healthy' : 'unhealthy'}">
                                     ${redisConnected ? 'CONNECTED' : 'DISCONNECTED'}
                                 </span>
-                            </p>
-                            <p style="margin: 5px 0;"><strong>Status Detail:</strong> <span style="color: #667eea;">${redisStatus}</span></p>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Status:</span>
+                                <span style="color: ${redisConnected ? '#10b981' : '#ef4444'}; font-weight: 600; text-transform: capitalize;">${redisStatus}</span>
+                            </div>
                         </div>
                     </div>
                     
-                    <div style="padding: 15px; background: #f9fafb; border-radius: 8px;">
-                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1em; display: flex; align-items: center; gap: 8px;">
-                            <span>⚙️</span> Services Status
-                        </h3>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <p style="margin: 5px 0;"><strong>DCF Service:</strong> 
+                    <!-- Services Status Card -->
+                    <div class="info-card" style="padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
+                            <span style="font-size: 1.5em;">⚙️</span>
+                            <h3 style="margin: 0; color: #1f2937; font-size: 1.1em; font-weight: 600;">Services Status</h3>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">DCF Service:</span>
                                 <span class="status-badge ${dcfStatus === 'healthy' ? 'healthy' : dcfStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
                                     ${dcfStatus.toUpperCase()}
                                 </span>
-                            </p>
-                            <p style="margin: 5px 0;"><strong>Stock Service:</strong> 
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Stock Service:</span>
                                 <span class="status-badge ${stockStatus === 'healthy' ? 'healthy' : stockStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
                                     ${stockStatus.toUpperCase()}
                                 </span>
-                            </p>
-                            <p style="margin: 5px 0;"><strong>Database Service:</strong> 
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Database Service:</span>
                                 <span class="status-badge ${databaseStatus === 'healthy' ? 'healthy' : databaseStatus === 'unhealthy' ? 'unhealthy' : 'warning'}">
                                     ${databaseStatus.toUpperCase()}
                                 </span>
-                            </p>
+                            </div>
                         </div>
                     </div>
                     
-                    <div style="padding: 15px; background: #f9fafb; border-radius: 8px;">
-                        <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1em; display: flex; align-items: center; gap: 8px;">
-                            <span>📊</span> System Metrics
-                        </h3>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <p style="margin: 5px 0;"><strong>Running Analyses:</strong> <span style="color: #667eea;">${monitoringData.services?.dcf?.running_analyses || 0}</span></p>
-                            <p style="margin: 5px 0;"><strong>Total Services:</strong> <span style="color: #667eea;">${totalServices}</span></p>
-                            <p style="margin: 5px 0;"><strong>Healthy Services:</strong> <span style="color: #10b981;">${healthyCount}</span></p>
-                            <p style="margin: 5px 0;"><strong>Response Time:</strong> <span style="color: #667eea;">${totalResponseTime}ms</span></p>
+                    <!-- System Metrics Card -->
+                    <div class="info-card" style="padding: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
+                            <span style="font-size: 1.5em;">📊</span>
+                            <h3 style="margin: 0; color: #1f2937; font-size: 1.1em; font-weight: 600;">System Metrics</h3>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Running Analyses:</span>
+                                <span style="color: #667eea; font-weight: 600; font-size: 1.1em;">${monitoringData.services?.dcf?.running_analyses || 0}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Total Services:</span>
+                                <span style="color: #667eea; font-weight: 600;">${totalServices}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Healthy Services:</span>
+                                <span style="color: #10b981; font-weight: 600;">${healthyCount}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280; font-size: 0.9em; font-weight: 500;">Avg Response Time:</span>
+                                <span style="color: #667eea; font-weight: 600;">${totalResponseTime}ms</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1000,6 +1283,10 @@
 
         function updateArchitectureTab(monitoringData) {
             const archData = getArchitectureData();
+            // Store monitoringData globally so showServiceDetails can access it
+            // Also store gatewayData for service status
+            window.currentMonitoringData = monitoringData;
+            window.currentGatewayData = healthData?.gateway || null;
             updateArchitectureDiagram(archData.architecture, monitoringData);
             updateRequestsList(monitoringData);
         }
@@ -1620,16 +1907,22 @@
                 else if (['DCF Service', 'Stock Service', 'Database Service'].includes(service.name)) level = 2;
                 else if (['PostgreSQL', 'Redis'].includes(service.name)) level = 3;
                 
-                let label = `${style.icon}\n${service.name}\n:${service.port}`;
+                // Compact label without line breaks to prevent wrapping issues
+                let label = `${style.icon} ${service.name}`;
                 if (service.name === 'Gateway') {
-                    label = `${style.icon}\n${service.name}\n:${service.port}\n🔒 HTTPS`;
+                    label = `${style.icon} ${service.name} 🔒`;
                 }
                 
+                // Enhanced tooltip with detailed information
                 const requestPathsText = service.requestPaths 
-                    ? service.requestPaths.map(rp => `${rp.path}: ${rp.method} ${rp.endpoint}`).join('\n')
-                    : 'No request paths defined';
+                    ? service.requestPaths.map(rp => `• ${rp.method} ${rp.endpoint}`).join('\n')
+                    : '• No request paths defined';
                 
-                const title = `${service.name}\n\n${service.description}\n\nPort: ${service.port}\n\nDependencies: ${service.dependencies.join(', ') || 'None'}\n\nRequest Paths:\n${requestPathsText}`;
+                const dependenciesText = service.dependencies.length > 0 
+                    ? service.dependencies.join(', ')
+                    : 'None';
+                
+                const title = `${service.name}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📋 Description:\n${service.description}\n\n🔌 Port: ${service.port}\n\n🔗 Dependencies:\n${dependenciesText}\n\n📡 Request Paths:\n${requestPathsText}\n\n💡 Click for detailed information`;
                 
                 return {
                     id: service.name,
@@ -1649,11 +1942,11 @@
                     },
                     shape: style.shape,
                     font: {
-                        size: 15,
+                        size: 16,
                         face: 'Segoe UI, Arial',
                         color: '#ffffff',
                         bold: true,
-                        multi: 'html'
+                        multi: false
                     },
                     size: getServiceSize(service.type, service.name),
                     borderWidth: 3,
@@ -1796,11 +2089,11 @@
                 layout: {
                     hierarchical: {
                         enabled: true,
-                        direction: 'UD',
+                        direction: 'LR',  // Left to Right instead of Up Down to prevent wrapping
                         sortMethod: 'directed',
-                        levelSeparation: 180,
-                        nodeSpacing: 250,
-                        treeSpacing: 300,
+                        levelSeparation: 250,
+                        nodeSpacing: 200,
+                        treeSpacing: 250,
                         blockShifting: true,
                         edgeMinimization: true,
                         parentCentralization: true,
@@ -1818,9 +2111,18 @@
             network.on("click", function (params) {
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
-                    const node = nodes.find(n => n.id === nodeId);
-                    if (node) {
-                        console.log('Selected node:', node);
+                    const service = architecture.services.find(s => s.name === nodeId);
+                    if (service) {
+                        // Use current monitoringData if available, otherwise use passed parameter
+                        const currentMonitoringData = window.currentMonitoringData || monitoringData;
+                        showServiceDetails(service, currentMonitoringData);
+                    }
+                } else if (params.edges.length > 0) {
+                    const edgeId = params.edges[0];
+                    const connection = architecture.connections.find(c => c.id === edgeId);
+                    if (connection) {
+                        const currentMonitoringData = window.currentMonitoringData || monitoringData;
+                        showConnectionDetails(connection, currentMonitoringData);
                     }
                 }
             });
@@ -1869,6 +2171,274 @@
                 (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
         }
 
+        function showServiceDetails(service, monitoringData) {
+            const panel = document.getElementById('serviceDetailsPanel');
+            const titleEl = document.getElementById('serviceDetailsTitle');
+            const contentEl = document.getElementById('serviceDetailsContent');
+            
+            // Get service health status from monitoring data
+            // Map service names to monitoring data keys
+            const serviceNameMap = {
+                'Frontend': 'frontend',
+                'Gateway': 'gateway',
+                'DCF Service': 'dcf',
+                'Stock Service': 'stock',
+                'Database Service': 'database',
+                'PostgreSQL': 'postgres',
+                'Redis': 'redis'
+            };
+            
+            const serviceKey = serviceNameMap[service.name] || service.name.toLowerCase().replace(' ', '_');
+            let status = 'unknown';
+            let healthData = null;
+            
+            // Special handling for Frontend - always healthy if page loads
+            if (service.name === 'Frontend') {
+                status = 'healthy';
+                healthData = { status: 'healthy', service: 'frontend' };
+            }
+            // Special handling for Gateway - get from gateway health endpoint
+            else if (service.name === 'Gateway') {
+                const gatewayData = window.currentGatewayData;
+                if (gatewayData) {
+                    status = gatewayData.status || 'unknown';
+                    healthData = gatewayData;
+                }
+            }
+            // Special handling for PostgreSQL - get from gateway health data
+            else if (service.name === 'PostgreSQL') {
+                const gatewayData = window.currentGatewayData;
+                if (gatewayData?.services) {
+                    // Check services.dcf.data.database_info or services.stock.data.database_info
+                    const dcfData = gatewayData.services.dcf?.data;
+                    const stockData = gatewayData.services.stock?.data;
+                    const dbInfo = dcfData?.database_info || stockData?.database_info;
+                    if (dbInfo?.connected === true) {
+                        status = 'healthy';
+                        healthData = { status: 'healthy', connected: true, database_info: dbInfo };
+                    } else if (dbInfo?.connected === false) {
+                        status = 'unhealthy';
+                        healthData = { status: 'unhealthy', connected: false };
+                    }
+                }
+            }
+            // Special handling for Redis - get from gateway health data
+            else if (service.name === 'Redis') {
+                const gatewayData = window.currentGatewayData;
+                if (gatewayData?.services) {
+                    // Check services.dcf.data.redis
+                    const dcfData = gatewayData.services.dcf?.data;
+                    const redisStatus = dcfData?.redis;
+                    if (redisStatus === 'connected') {
+                        status = 'healthy';
+                        healthData = { status: 'healthy', redis: redisStatus };
+                    } else if (redisStatus === 'disconnected') {
+                        status = 'unhealthy';
+                        healthData = { status: 'unhealthy', redis: redisStatus };
+                    }
+                }
+            }
+            // For other services (DCF, Stock, Database) - try multiple sources
+            else {
+                // Try to get status from monitoringData.services first
+                if (monitoringData?.services) {
+                    healthData = monitoringData.services[serviceKey] || monitoringData.services[service.name.toLowerCase()];
+                    if (healthData) {
+                        status = healthData.status || healthData.data?.status || 'unknown';
+                    }
+                }
+                
+                // Fallback: try to get from gateway health data (from /api/health)
+                if (status === 'unknown') {
+                    const gatewayData = window.currentGatewayData;
+                    if (gatewayData?.services) {
+                        const gatewayServiceData = gatewayData.services[serviceKey] || gatewayData.services[service.name.toLowerCase()];
+                        if (gatewayServiceData) {
+                            status = gatewayServiceData.status || gatewayServiceData.data?.status || 'unknown';
+                            healthData = gatewayServiceData;
+                        }
+                    }
+                }
+                
+                // Fallback: try to get from monitoringData.health.services
+                if (status === 'unknown' && monitoringData?.health?.services) {
+                    const healthServiceData = monitoringData.health.services[serviceKey] || monitoringData.health.services[service.name.toLowerCase()];
+                    if (healthServiceData) {
+                        status = healthServiceData.status || healthServiceData.data?.status || 'unknown';
+                        healthData = healthServiceData;
+                    }
+                }
+            }
+            
+            // Final fallback: check if healthData exists but status is still unknown
+            if (status === 'unknown' && healthData && typeof healthData === 'object') {
+                status = healthData.status || 'unknown';
+            }
+            
+            // Map status values
+            if (status === 'healthy' || status === 'connected' || status === 'up') {
+                status = 'healthy';
+            } else if (status === 'unhealthy' || status === 'disconnected' || status === 'down') {
+                status = 'unhealthy';
+            } else if (status === 'warning' || status === 'degraded') {
+                status = 'warning';
+            }
+            
+            const isHealthy = status === 'healthy';
+            
+            titleEl.textContent = `${service.name} - Details`;
+            
+            const requestPathsHtml = service.requestPaths && service.requestPaths.length > 0
+                ? `<ul class="endpoint-list">${service.requestPaths.map(rp => 
+                    `<li><strong>${rp.method}</strong> ${rp.path} → ${rp.endpoint}</li>`
+                ).join('')}</ul>`
+                : '<p style="color: #6b7280; font-style: italic;">No request paths defined</p>';
+            
+            const dependenciesHtml = service.dependencies && service.dependencies.length > 0
+                ? service.dependencies.map(dep => `<span class="status-badge healthy" style="margin: 2px;">${dep}</span>`).join('')
+                : '<span style="color: #6b7280; font-style: italic;">None</span>';
+            
+            contentEl.innerHTML = `
+                <div class="service-detail-section">
+                    <h4>📋 Service Information</h4>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Service Name:</span>
+                        <span class="service-detail-value">${service.name}</span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Type:</span>
+                        <span class="service-detail-value">${service.type.toUpperCase()}</span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Port:</span>
+                        <span class="service-detail-value">:${service.port}</span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Status:</span>
+                        <span class="service-detail-value">
+                            <span class="status-badge ${status === 'healthy' ? 'healthy' : status === 'unhealthy' ? 'unhealthy' : status === 'warning' ? 'warning' : 'unknown'}">${status === 'healthy' ? '✓ Healthy' : status === 'unhealthy' ? '✗ Unhealthy' : status === 'warning' ? '⚠ Warning' : '? Unknown'}</span>
+                        </span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Description:</span>
+                        <span class="service-detail-value" style="text-align: left;">${service.description}</span>
+                    </div>
+                </div>
+                
+                <div class="service-detail-section">
+                    <h4>🔗 Dependencies</h4>
+                    <div style="margin-top: 10px;">
+                        ${dependenciesHtml}
+                    </div>
+                </div>
+                
+                <div class="service-detail-section">
+                    <h4>📡 Request Paths & Endpoints</h4>
+                    ${requestPathsHtml}
+                </div>
+                
+                ${healthData ? `
+                <div class="service-detail-section">
+                    <h4>💚 Health Status</h4>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Status:</span>
+                        <span class="service-detail-value">
+                            <span class="status-badge ${status === 'healthy' ? 'healthy' : status === 'unhealthy' ? 'unhealthy' : status === 'warning' ? 'warning' : 'unknown'}">${status === 'healthy' ? '✓ Healthy' : status === 'unhealthy' ? '✗ Unhealthy' : status === 'warning' ? '⚠ Warning' : '? Unknown'}</span>
+                        </span>
+                    </div>
+                    ${healthData.timestamp ? `
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Last Check:</span>
+                        <span class="service-detail-value">${new Date(healthData.timestamp).toLocaleString()}</span>
+                    </div>
+                    ` : ''}
+                    ${healthData.data ? `
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Additional Info:</span>
+                        <span class="service-detail-value" style="text-align: left; font-size: 0.85em;">
+                            <pre style="background: #f3f4f6; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 0;">${JSON.stringify(healthData.data, null, 2)}</pre>
+                        </span>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+            `;
+            
+            panel.style.display = 'block';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function showConnectionDetails(connection, monitoringData) {
+            const panel = document.getElementById('serviceDetailsPanel');
+            const titleEl = document.getElementById('serviceDetailsTitle');
+            const contentEl = document.getElementById('serviceDetailsContent');
+            
+            const isActive = monitoringData.services?.dcf?.analyses?.some(a => 
+                (a.status === 'running' || a.status === 'processing') && 
+                (connection.id === 'frontend-gateway' || connection.id === 'gateway-dcf')
+            );
+            
+            titleEl.textContent = `${connection.from} → ${connection.to} Connection`;
+            
+            const endpointsHtml = connection.endpoints && connection.endpoints.length > 0
+                ? `<ul class="endpoint-list">${connection.endpoints.map(ep => 
+                    `<li>${ep}</li>`
+                ).join('')}</ul>`
+                : '<p style="color: #6b7280; font-style: italic;">No endpoints defined</p>';
+            
+            const requestPathsHtml = connection.requestPaths && connection.requestPaths.length > 0
+                ? `<ul class="endpoint-list">${connection.requestPaths.map(rp => 
+                    `<li>${rp}</li>`
+                ).join('')}</ul>`
+                : '<p style="color: #6b7280; font-style: italic;">No request paths defined</p>';
+            
+            contentEl.innerHTML = `
+                <div class="service-detail-section">
+                    <h4>🔗 Connection Information</h4>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">From:</span>
+                        <span class="service-detail-value">${connection.from}</span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">To:</span>
+                        <span class="service-detail-value">${connection.to}</span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Protocol:</span>
+                        <span class="service-detail-value">
+                            ${connection.protocol === 'HTTPS' ? '🔒 ' : ''}${connection.protocol}
+                        </span>
+                    </div>
+                    <div class="service-detail-item">
+                        <span class="service-detail-label">Status:</span>
+                        <span class="service-detail-value">
+                            <span class="status-badge ${isActive ? 'warning' : 'healthy'}">
+                                ${isActive ? '⚡ ACTIVE' : 'IDLE'}
+                            </span>
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="service-detail-section">
+                    <h4>📡 Endpoints</h4>
+                    ${endpointsHtml}
+                </div>
+                
+                <div class="service-detail-section">
+                    <h4>🔄 Request Paths</h4>
+                    ${requestPathsHtml}
+                </div>
+            `;
+            
+            panel.style.display = 'block';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function closeServiceDetails() {
+            const panel = document.getElementById('serviceDetailsPanel');
+            panel.style.display = 'none';
+        }
+
         function updateRequestsList(data) {
             const listEl = document.getElementById('requestsList');
             const analyses = data.services?.dcf?.analyses || [];
@@ -1877,7 +2447,7 @@
                 listEl.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">⏳</div>
-                        <p>Không có request nào đang xử lý</p>
+                        <p>No active requests</p>
                     </div>
                 `;
                 return;
@@ -1939,6 +2509,167 @@
             link.click();
             URL.revokeObjectURL(url);
         }
+
+        // ==================== Logs Functions ====================
+        let logsAutoRefreshInterval = null;
+
+        async function loadLogs() {
+            const logsContainer = document.getElementById('logsContainer');
+            const serviceSelect = document.getElementById('logServiceSelect');
+            const linesInput = document.getElementById('logLinesInput');
+            
+            logsContainer.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading logs...</p></div>';
+            
+            try {
+                const service = serviceSelect.value || null;
+                const lines = parseInt(linesInput.value) || 100;
+                
+                const url = `/api/logs${service ? `?service=${service}&lines=${lines}` : `?lines=${lines}`}`;
+                const response = await fetch(url);
+                
+                // Check if response is OK and is JSON
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Invalid response format. Service may be unavailable.');
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    logsContainer.innerHTML = `<div class="log-empty">${data.error}</div>`;
+                    return;
+                }
+                
+                renderLogs(data.logs || data);
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                const errorMsg = error.message || 'Unknown error';
+                if (errorMsg.includes('JSON') || errorMsg.includes('Unexpected token') || errorMsg.includes('502')) {
+                    logsContainer.innerHTML = '<div class="log-empty">Unable to load logs. Please check if services are running.</div>';
+                } else {
+                    logsContainer.innerHTML = `<div class="log-empty">Unable to load logs: ${errorMsg}</div>`;
+                }
+            }
+        }
+
+        function renderLogs(logsData) {
+            const logsContainer = document.getElementById('logsContainer');
+            
+            if (!logsData || Object.keys(logsData).length === 0) {
+                logsContainer.innerHTML = '<div class="log-empty">No logs available</div>';
+                return;
+            }
+            
+            let html = '';
+            
+            for (const [serviceName, serviceLogs] of Object.entries(logsData)) {
+                if (serviceLogs.error) {
+                    // Show friendly message instead of raw error
+                    const friendlyMessage = serviceLogs.error.includes("No logs available") 
+                        ? "No logs available for this service. The service may not have generated any logs yet."
+                        : serviceLogs.error;
+                    
+                    html += `
+                        <div class="log-viewer">
+                            <div class="log-viewer-header">
+                                <h3>${serviceName.toUpperCase()} <span style="font-size: 0.8em; opacity: 0.8;">(${serviceLogs.container})</span></h3>
+                                <span class="log-stats" style="color: #6b7280;">No logs</span>
+                            </div>
+                            <div class="log-viewer-content" style="color: #6b7280; padding: 20px; text-align: center; font-style: italic;">
+                                ${escapeHtml(friendlyMessage)}
+                            </div>
+                        </div>
+                    `;
+                    continue;
+                }
+                
+                const logs = serviceLogs.logs || [];
+                const logLines = logs.length;
+                
+                html += `
+                    <div class="log-viewer">
+                        <div class="log-viewer-header" onclick="toggleLogViewer('${serviceName}')">
+                            <h3>${serviceName.toUpperCase()} <span style="font-size: 0.8em; opacity: 0.8;">(${serviceLogs.container})</span></h3>
+                            <span class="log-stats">${logLines} lines</span>
+                        </div>
+                        <div class="log-viewer-content" id="log-content-${serviceName}" style="display: none;">
+                            ${logs.length > 0 ? logs.map(log => {
+                                const logClass = getLogLevelClass(log);
+                                return `<div class="log-line ${logClass}">${escapeHtml(log)}</div>`;
+                            }).join('') : '<div class="log-empty">No logs available</div>'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            logsContainer.innerHTML = html;
+            
+            // Auto-expand first log viewer
+            const firstViewer = Object.keys(logsData)[0];
+            if (firstViewer) {
+                toggleLogViewer(firstViewer);
+            }
+        }
+
+        function toggleLogViewer(serviceName) {
+            const content = document.getElementById(`log-content-${serviceName}`);
+            if (content) {
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function getLogLevelClass(logLine) {
+            const lower = logLine.toLowerCase();
+            if (lower.includes('error') || lower.includes('exception') || lower.includes('traceback')) {
+                return 'error';
+            } else if (lower.includes('warning') || lower.includes('warn')) {
+                return 'warning';
+            } else if (lower.includes('info')) {
+                return 'info';
+            } else if (lower.includes('debug')) {
+                return 'debug';
+            }
+            return '';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleAutoRefreshLogs() {
+            const checkbox = document.getElementById('autoRefreshLogs');
+            if (checkbox.checked) {
+                logsAutoRefreshInterval = setInterval(loadLogs, 5000);
+            } else {
+                if (logsAutoRefreshInterval) {
+                    clearInterval(logsAutoRefreshInterval);
+                    logsAutoRefreshInterval = null;
+                }
+            }
+        }
+
+        // Override switchTab to handle logs tab
+        const originalSwitchTab = switchTab;
+        switchTab = function(tabName) {
+            originalSwitchTab(tabName);
+            if (tabName === 'logs') {
+                loadLogs();
+            } else {
+                // Stop logs auto-refresh when switching away from logs tab
+                if (logsAutoRefreshInterval) {
+                    clearInterval(logsAutoRefreshInterval);
+                    logsAutoRefreshInterval = null;
+                }
+                const checkbox = document.getElementById('autoRefreshLogs');
+                if (checkbox) checkbox.checked = false;
+            }
+        };
 
         // Initial load
         refreshData();

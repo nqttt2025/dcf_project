@@ -84,24 +84,10 @@ def is_float(string):
 
 def get_free_cash_flow_ttm(ticker):
     """
-    Tính Free Cash Flow TTM (Trailing Twelve Months) từ vnstock
-    bằng cách cộng dồn 4 quý gần nhất.
+    Tính Free Cash Flow TTM (Trailing Twelve Months) với priority: Database → Redis → File → vnstock API
     
     TTM (Trailing Twelve Months) là tổng hợp dữ liệu từ 12 tháng gần nhất,
     thường được tính bằng cách cộng dồn 4 quý báo cáo gần nhất.
-    
-    Tại sao sử dụng TTM?
-    - Phản ánh tốt hơn tình hình hiện tại của công ty (12 tháng gần nhất)
-    - Tránh biến động theo mùa của từng quý riêng lẻ
-    - Chuẩn trong phân tích tài chính và định giá DCF
-    - Nhất quán với cách tính của các nguồn dữ liệu khác (như stockanalysis.com)
-    
-    Ví dụ với FPT:
-    - Q3 2025: OCF = 4,344 tỷ VND, CapEx = 830 tỷ VND
-    - Q2 2025: OCF = 4,190 tỷ VND, CapEx = 688 tỷ VND
-    - Q1 2025: OCF = ... tỷ VND, CapEx = ... tỷ VND
-    - Q4 2024: OCF = 5,397 tỷ VND, CapEx = 838 tỷ VND
-    - TTM FCF = Tổng OCF - Tổng CapEx của 4 quý
     
     Args:
         ticker (str): Mã cổ phiếu (ví dụ: 'FPT', 'VNM')
@@ -109,16 +95,47 @@ def get_free_cash_flow_ttm(ticker):
     Returns:
         float: Free Cash Flow TTM tính bằng VND, hoặc None nếu không lấy được dữ liệu
     
-    Note:
-        - Hàm sẽ tự động cache kết quả để tránh tính toán lại
-        - Nếu không đủ 4 quý dữ liệu, sẽ trả về None
-        - CapEx được lấy giá trị tuyệt đối (vì trong báo cáo thường là số âm)
-    
-    Example:
-        >>> fcf_ttm = get_free_cash_flow_ttm('FPT')
-        >>> print(f"FCF TTM: {fcf_ttm:,.0f} VND")
-        FCF TTM: 13,933,764,607,232 VND
+    Priority:
+        1. Database (financial_data table) - Nhanh nhất, đáng tin cậy nhất
+        2. Redis cache
+        3. File cache
+        4. vnstock API (fallback) - Chậm, có thể bị timeout
     """
+    ticker = ticker.upper()
+    
+    # 1. Try Database first (fastest and most reliable)
+    if HAS_DATA_FETCHER:
+        try:
+            financial_data = get_financial_ttm(ticker)
+            if financial_data and financial_data.get('ttm_fcf'):
+                fcf_ttm = float(financial_data['ttm_fcf'])
+                logger.info(f"Got FCF TTM from database for {ticker}: {fcf_ttm:,.0f} VND")
+                # Cache to file cache for future use
+                cache_manager.set_with_timestamp(ticker, "fcf_ttm", fcf_ttm)
+                return fcf_ttm
+        except Exception as e:
+            logger.debug(f"Failed to get FCF TTM from database for {ticker}: {e}")
+    
+    # 2. Try Redis cache
+    if HAS_REDIS and redis_client:
+        try:
+            financial_data = redis_client.get_financial_ttm(ticker)
+            if financial_data and financial_data.get('ttm_fcf'):
+                fcf_ttm = float(financial_data['ttm_fcf'])
+                logger.info(f"Got FCF TTM from Redis for {ticker}: {fcf_ttm:,.0f} VND")
+                return fcf_ttm
+        except Exception as e:
+            logger.debug(f"Failed to get FCF TTM from Redis for {ticker}: {e}")
+    
+    # 3. Try file cache
+    cache_key = "fcf_ttm"
+    if cache_manager.exists(ticker, cache_key):
+        cached_value = cache_manager.get_with_timestamp(ticker, cache_key)
+        if cached_value:
+            logger.info(f"Using cached FCF TTM for {ticker}: {cached_value:,.0f} VND")
+            return float(cached_value)
+    
+    # 4. Fallback to vnstock API (slow, may timeout)
     if not HAS_VNSTOCK:
         logger.error("vnstock not installed. Install with: pip install vnstock")
         return None
@@ -127,12 +144,7 @@ def get_free_cash_flow_ttm(ticker):
         logger.error("pandas not installed. Install with: pip install pandas")
         return None
     
-    # Check cache first
-    cache_key = "fcf_ttm"
-    if cache_manager.exists(ticker, cache_key):
-        cached_value = cache_manager.get_with_timestamp(ticker, cache_key)
-        logger.info(f"Using cached FCF TTM for {ticker}: {cached_value:,.0f} VND")
-        return float(cached_value)
+    logger.warning(f"No FCF TTM found in database/cache for {ticker}, fetching from vnstock API (may be slow)...")
     
     try:
         logger.info(f"Calculating FCF TTM for {ticker} from vnstock (summing last 4 quarters)...")
@@ -281,14 +293,13 @@ def get_free_cash_flow(ticker, use_ttm=True):
         >>> # Chỉ lấy quý gần nhất (không khuyến nghị)
         >>> fcf_quarter = get_free_cash_flow('FPT', use_ttm=False)
     """
-    # Sử dụng TTM (mặc định) - tính từ vnstock bằng cách cộng 4 quý gần nhất
-    # Đây là phương pháp được khuyến nghị vì phản ánh tốt hơn tình hình hiện tại
+    # Sử dụng TTM (mặc định) - ưu tiên database trước, fallback về vnstock API
     if use_ttm:
         fcf_ttm = get_free_cash_flow_ttm(ticker)
         if fcf_ttm:
             return fcf_ttm
-        # Nếu không tính được TTM, cảnh báo và fallback về quý gần nhất
-        logger.warning(f"Could not calculate TTM for {ticker}, falling back to single quarter")
+        # Nếu không có trong database/cache, cảnh báo và fallback về quý gần nhất từ vnstock
+        logger.warning(f"Could not get TTM from database/cache for {ticker}, falling back to vnstock API (may be slow)")
     
     # Fallback: Lấy dữ liệu từ quý gần nhất (không khuyến nghị cho DCF)
     # Chỉ sử dụng khi không thể tính TTM hoặc use_ttm=False
@@ -679,12 +690,50 @@ def get_earnings_per_share_Diluted(ticker):
         return default_eps
 
 def price_board_stock(ticker):
+    """
+    Get stock price with priority: Database → Redis → File Cache → vnstock API
+    """
+    ticker = ticker.upper()
+    
+    # 1. Try Database first (fastest and most reliable)
+    if HAS_DATA_FETCHER:
+        try:
+            market_data = get_market_data(ticker)
+            if market_data and market_data.get('current_price'):
+                price = float(market_data['current_price'])
+                logger.info(f"Got price from database for {ticker}: {price:,.0f}")
+                # Cache to file cache for future use
+                cache_manager.set_with_timestamp(ticker, "price", price)
+                return price
+        except Exception as e:
+            logger.debug(f"Failed to get price from database for {ticker}: {e}")
+    
+    # 2. Try Redis cache
+    if HAS_REDIS and redis_client:
+        try:
+            market_data = redis_client.get_market_data(ticker)
+            if market_data and market_data.get('current_price'):
+                price = float(market_data['current_price'])
+                logger.info(f"Got price from Redis for {ticker}: {price:,.0f}")
+                return price
+        except Exception as e:
+            logger.debug(f"Failed to get price from Redis for {ticker}: {e}")
+    
+    # 3. Try file cache
+    if cache_manager.exists(ticker, "price"):
+        price = cache_manager.get_with_timestamp(ticker, "price")
+        if price:
+            logger.info(f"Using cached price for {ticker}: {price:,.0f}")
+            return float(price)
+    
+    # 4. Fallback to vnstock API (slow, may timeout)
     if not HAS_VNSTOCK:
         logger.error("vnstock not installed. Install with: pip install vnstock")
         default_price = 50000
         logger.info(f"Using default: {default_price}")
         return default_price
 
+    logger.warning(f"No price found in database/cache for {ticker}, fetching from vnstock API (may be slow)...")
     try:
         logger.info(f"Fetching price for {ticker} using vnstock...")
         old_stdout = sys.stdout
@@ -734,10 +783,55 @@ def price_board_stock(ticker):
 
 
 def get_market_cap(ticker):
+    """
+    Get market cap with priority: Database → Redis → File Cache → vnstock API
+    
+    Returns:
+        tuple: (market_cap, price) or raises Exception
+    """
+    ticker = ticker.upper()
+    
+    # 1. Try Database first (fastest and most reliable)
+    if HAS_DATA_FETCHER:
+        try:
+            market_data = get_market_data(ticker)
+            if market_data and market_data.get('market_cap'):
+                market_cap = int(market_data['market_cap'])
+                price = float(market_data.get('current_price', 0))
+                logger.info(f"Got market cap from database for {ticker}: {market_cap:,.0f}")
+                # Cache to file cache for future use
+                cache_manager.set_with_timestamp(ticker, "market_cap", market_cap)
+                if price:
+                    cache_manager.set_with_timestamp(ticker, "price", price)
+                return (market_cap, price)
+        except Exception as e:
+            logger.debug(f"Failed to get market cap from database for {ticker}: {e}")
+    
+    # 2. Try Redis cache
+    if HAS_REDIS and redis_client:
+        try:
+            market_data = redis_client.get_market_data(ticker)
+            if market_data and market_data.get('market_cap'):
+                market_cap = int(market_data['market_cap'])
+                price = float(market_data.get('current_price', 0))
+                logger.info(f"Got market cap from Redis for {ticker}: {market_cap:,.0f}")
+                return (market_cap, price)
+        except Exception as e:
+            logger.debug(f"Failed to get market cap from Redis for {ticker}: {e}")
+    
+    # 3. Try file cache
+    market_cap = cache_manager.get_with_timestamp(ticker, "market_cap")
+    price = cache_manager.get_with_timestamp(ticker, "price")
+    if market_cap:
+        logger.info(f"Using cached market cap for {ticker}: {market_cap:,.0f}")
+        return (float(market_cap), float(price) if price else 0)
+    
+    # 4. Fallback to vnstock API (slow, may timeout)
     if not HAS_VNSTOCK:
         logger.error("vnstock not installed. Install with: pip install vnstock")
         raise Exception("vnstock not installed")
 
+    logger.warning(f"No market cap found in database/cache for {ticker}, fetching from vnstock API (may be slow)...")
     try:
         logger.info(f"Fetching market cap for {ticker} using vnstock...")
         old_stdout = sys.stdout

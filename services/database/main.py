@@ -20,9 +20,14 @@ from typing import List, Optional
 import redis
 from datetime import datetime
 import json
+import logging
 
 # Import common utilities after path setup
 from services.common import setup_cors, create_health_response
+
+# Setup service-specific logger với rotation và tối ưu hiệu năng
+from src.utils.service_logger import setup_service_logger
+logger = setup_service_logger('database', level=logging.INFO)
 
 from .database import get_db, engine, Base
 from .models import Stock
@@ -37,8 +42,8 @@ try:
 except Exception as e:
     HAS_REDIS = False
     sync_redis_client = None
-    import logging
-    logging.warning(f"Redis client not available for sync status: {e}")
+    # Logger sẽ được setup sau
+    pass
 
 # Lazy import sync_service to prevent service crash if sync_service has errors
 # Import only when needed (in sync endpoints)
@@ -47,9 +52,8 @@ try:
     from .sync_service import sync_financial_data, sync_market_data, sync_shares_outstanding
     SYNC_SERVICE_AVAILABLE = True
 except Exception as e:
-    # Log error but don't crash the service
-    import logging
-    logging.warning(f"Sync service not available: {e}. Database service will continue without sync functionality.")
+    # Logger sẽ được setup sau
+    pass
 
 app = FastAPI(
     title="Database Service",
@@ -789,6 +793,78 @@ async def get_sync_status(
     return {
         "status": "not_found",
         "message": "No sync status found. Sync may not have started yet."
+    }
+
+
+@app.get("/api/database/sync/jobs")
+async def list_sync_jobs():
+    """List all active sync jobs"""
+    import json
+    jobs = []
+    
+    # Get jobs from Redis
+    if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+        try:
+            # Get all sync keys from Redis
+            keys = sync_redis_client._client.keys("sync:*")
+            for key in keys:
+                try:
+                    key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                    sync_id = key_str.replace("sync:", "")
+                    status_data = sync_redis_client._client.get(key_str)
+                    if status_data:
+                        status = json.loads(status_data)
+                        status['sync_id'] = sync_id
+                        jobs.append(status)
+                except Exception as e:
+                    continue
+        except Exception as e:
+            pass
+    
+    # Add jobs from memory store
+    for sync_id, status in sync_status_store.items():
+        # Check if not already added from Redis
+        if not any(j.get('sync_id') == sync_id for j in jobs):
+            status_copy = status.copy()
+            status_copy['sync_id'] = sync_id
+            jobs.append(status_copy)
+    
+    # Sort by started_at (most recent first)
+    jobs.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+    
+    # Filter out completed/failed jobs older than 1 hour
+    from datetime import datetime, timedelta
+    cutoff_time = datetime.now() - timedelta(hours=1)
+    active_jobs = []
+    completed_jobs = []
+    
+    for job in jobs:
+        started_at_str = job.get('started_at')
+        if started_at_str:
+            try:
+                started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                if started_at.tzinfo:
+                    started_at = started_at.replace(tzinfo=None)
+                cutoff = cutoff_time.replace(tzinfo=None)
+                
+                status = job.get('status', 'unknown')
+                if status in ['running', 'pending']:
+                    active_jobs.append(job)
+                elif status in ['completed', 'failed'] and started_at > cutoff:
+                    completed_jobs.append(job)
+            except:
+                # If parsing fails, include it anyway
+                if job.get('status') in ['running', 'pending']:
+                    active_jobs.append(job)
+        else:
+            if job.get('status') in ['running', 'pending']:
+                active_jobs.append(job)
+    
+    return {
+        "active_jobs": active_jobs,
+        "recent_completed": completed_jobs,
+        "total_active": len(active_jobs),
+        "total_recent_completed": len(completed_jobs)
     }
 
 

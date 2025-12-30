@@ -1,5 +1,5 @@
 """
-Data Fetcher with Priority: Database → Redis → File → vnstock API
+Data Fetcher with Priority: Database → Redis → File → Request Sync → vnstock API
 """
 from typing import Optional, Dict, Any, Callable
 from ..utils.logger import get_logger
@@ -7,10 +7,73 @@ from ..utils.database_client import check_database_connection, get_db
 from ..utils.redis_client import get_redis_client
 from ..utils.cache_manager import get_cache_manager
 from sqlalchemy import text
+import os
 
 logger = get_logger()
 redis_client = get_redis_client()
 cache_manager = get_cache_manager()
+
+# Database service URL for requesting sync
+DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database:8003")
+
+def request_sync_from_database_service(ticker: str, data_type: str) -> bool:
+    """
+    Request database service to sync data for a ticker
+    
+    Args:
+        ticker: Stock ticker
+        data_type: Type of data ('financial_data', 'market_data', 'shares_outstanding')
+    
+    Returns:
+        True if sync request was sent successfully, False otherwise
+    """
+    try:
+        import httpx
+        import asyncio
+        
+        # Map data_type to table_name
+        table_mapping = {
+            'financial_ttm': 'financial_data',
+            'market_data': 'market_data',
+            'shares': 'shares_outstanding'
+        }
+        
+        table_name = table_mapping.get(data_type, data_type)
+        
+        # Request sync in background (non-blocking)
+        url = f"{DATABASE_SERVICE_URL}/api/database/sync/{table_name}?ticker={ticker.upper()}"
+        
+        # Use async to make non-blocking request
+        async def _request_sync():
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.post(url)
+                    if response.status_code in [200, 202]:
+                        logger.info(f"Requested sync for {ticker} ({table_name}) from database service")
+                        return True
+                    else:
+                        logger.warning(f"Failed to request sync: HTTP {response.status_code}")
+                        return False
+            except Exception as e:
+                logger.debug(f"Could not request sync from database service: {e}")
+                return False
+        
+        # Run async request (non-blocking)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, create a task
+                asyncio.create_task(_request_sync())
+            else:
+                loop.run_until_complete(_request_sync())
+        except RuntimeError:
+            # No event loop, create new one
+            asyncio.run(_request_sync())
+        
+        return True
+    except Exception as e:
+        logger.debug(f"Error requesting sync from database service: {e}")
+        return False
 
 
 def get_financial_ttm(ticker: str) -> Optional[Dict[str, Any]]:
@@ -76,7 +139,11 @@ def get_financial_ttm(ticker: str) -> Optional[Dict[str, Any]]:
     # Note: File cache format is different, need to reconstruct TTM
     # For now, skip file cache for TTM (requires aggregation)
     
-    # 4. Return None - caller should fetch from vnstock API
+    # 4. Request sync from database service (non-blocking)
+    logger.info(f"No financial TTM data found for {ticker} in database/cache, requesting sync from database service...")
+    request_sync_from_database_service(ticker, 'financial_ttm')
+    
+    # 5. Return None - caller should fetch from vnstock API as fallback
     return None
 
 
@@ -152,7 +219,11 @@ def get_market_data(ticker: str) -> Optional[Dict[str, Any]]:
         logger.info(f"Got market data from file cache for {ticker}")
         return data
     
-    # 4. Return None - caller should fetch from vnstock API
+    # 4. Request sync from database service (non-blocking)
+    logger.info(f"No market data found for {ticker} in database/cache, requesting sync from database service...")
+    request_sync_from_database_service(ticker, 'market_data')
+    
+    # 5. Return None - caller should fetch from vnstock API as fallback
     return None
 
 
@@ -254,7 +325,11 @@ def get_shares_outstanding(ticker: str) -> Optional[float]:
         logger.info(f"Got shares from file cache for {ticker}: {shares:,.0f}")
         return float(shares)
     
-    # 4. Return None - caller should fetch from vnstock API
+    # 4. Request sync from database service (non-blocking)
+    logger.info(f"No shares data found for {ticker} in database/cache, requesting sync from database service...")
+    request_sync_from_database_service(ticker, 'shares')
+    
+    # 5. Return None - caller should fetch from vnstock API as fallback
     return None
 
 

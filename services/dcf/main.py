@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from typing import Optional
 import asyncio
 from datetime import datetime
+import logging
 
 # Import common utilities after path setup
 from services.common import create_health_response
@@ -23,6 +24,10 @@ from services.common import create_health_response
 from src.core.dcf_calculator import calculate_dcf_from_config
 from src.utils.result_manager import get_result_manager
 from src.utils.redis_client import get_redis_client
+
+# Setup service-specific logger với rotation và tối ưu hiệu năng
+from src.utils.service_logger import setup_service_logger
+logger = setup_service_logger('dcf', level=logging.INFO)
 
 app = FastAPI(title="DCF Analysis Service")
 
@@ -44,7 +49,16 @@ def root():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
-    return create_health_response("dcf-service", include_database=True)
+    health_response = create_health_response("dcf-service", include_database=True)
+    
+    # Add Redis status
+    try:
+        redis_status = "connected" if redis_client._client and redis_client._client.ping() else "disconnected"
+    except Exception as e:
+        redis_status = f"error: {str(e)}"
+    
+    health_response["redis"] = redis_status
+    return health_response
 
 # Semaphore to limit concurrent analyses
 _analysis_semaphore = asyncio.Semaphore(10)  # Max 10 concurrent analyses
@@ -106,16 +120,22 @@ async def perform_analysis(ticker: str, config_file: str, started_at: str):
                 started_at=started_at
             )
             
-            # Run DCF calculation with progress callbacks
-            result = await calculate_dcf_from_config(config_file, progress_callback=lambda p, msg: 
-                redis_client.set_analysis_status(
-                    ticker,
-                    'processing',
-                    progress=msg,
-                    progress_percent=p,
-                    started_at=started_at
+            # Run DCF calculation with timeout (30 minutes max)
+            try:
+                result = await asyncio.wait_for(
+                    calculate_dcf_from_config(config_file, progress_callback=lambda p, msg: 
+                        redis_client.set_analysis_status(
+                            ticker,
+                            'processing',
+                            progress=msg,
+                            progress_percent=p,
+                            started_at=started_at
+                        )
+                    ),
+                    timeout=1800.0  # 30 minutes timeout
                 )
-            )
+            except asyncio.TimeoutError:
+                raise Exception(f"Analysis timeout after 30 minutes")
             
             # Mark as completed
             redis_client.set_analysis_status(
@@ -182,9 +202,73 @@ def get_analysis_result(ticker: str):
 def get_service_status():
     """Lấy trạng thái của service"""
     running_analyses = redis_client.get_all_running_analyses()
+    
+    # Cleanup stuck analyses (running for more than 30 minutes)
+    cleanup_stuck_analyses(running_analyses)
+    
+    # Get updated list after cleanup
+    running_analyses = redis_client.get_all_running_analyses()
+    
     return {
         'status': 'healthy',
         'running_analyses': len(running_analyses),
         'analyses': running_analyses
+    }
+
+def cleanup_stuck_analyses(analyses: dict):
+    """Cleanup analyses that have been stuck for too long"""
+    current_time = datetime.now()
+    stuck_threshold_minutes = 30  # 30 minutes
+    
+    for ticker, analysis in analyses.items():
+        started_at_str = analysis.get('started_at')
+        if not started_at_str:
+            continue
+        
+        try:
+            started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+            # Handle timezone-aware datetime
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=None)
+                current_time = current_time.replace(tzinfo=None)
+            
+            elapsed_minutes = (current_time - started_at).total_seconds() / 60
+            
+            # If analysis has been running for more than threshold, cleanup immediately
+            if elapsed_minutes > stuck_threshold_minutes:
+                logger.warning(f"Analysis {ticker} has been stuck for {elapsed_minutes:.1f} minutes, cleaning up")
+                # Delete immediately - no need to mark as failed since it's stuck
+                redis_client.delete_analysis_status(ticker)
+        except Exception as e:
+            logger.error(f"Error cleaning up stuck analysis {ticker}: {e}")
+
+@app.post("/cleanup-stuck")
+async def cleanup_stuck_analyses_endpoint():
+    """Manually cleanup stuck analyses"""
+    running_analyses = redis_client.get_all_running_analyses()
+    cleaned_count = 0
+    
+    for ticker, analysis in running_analyses.items():
+        started_at_str = analysis.get('started_at')
+        if not started_at_str:
+            continue
+        
+        try:
+            started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+            if started_at.tzinfo:
+                started_at = started_at.replace(tzinfo=None)
+            
+            elapsed_minutes = (datetime.now() - started_at).total_seconds() / 60
+            
+            if elapsed_minutes > 30:  # 30 minutes threshold
+                redis_client.delete_analysis_status(ticker)
+                cleaned_count += 1
+                logger.info(f"Cleaned up stuck analysis: {ticker} (stuck for {elapsed_minutes:.1f} minutes)")
+        except Exception as e:
+            logger.error(f"Error cleaning up {ticker}: {e}")
+    
+    return {
+        'message': f'Cleaned up {cleaned_count} stuck analyses',
+        'cleaned_count': cleaned_count
     }
 

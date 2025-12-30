@@ -130,26 +130,54 @@ class DCFCalculator:
         """
         self.logger.info(f"Starting async data fetch for {self.ticker}...")
 
-        # Tạo các task để fetch dữ liệu song song (parallel execution)
-        # Lưu ý: get_free_cash_flow() mặc định sử dụng TTM (use_ttm=True)
-        # TTM phản ánh tốt hơn tình hình hiện tại và chuẩn trong phân tích DCF
+        # Tạo các task với timeout riêng cho từng API call (60 giây mỗi call)
+        # Điều này ngăn một API call bị hang làm block toàn bộ analysis
+        async def fetch_with_timeout(func, *args, timeout=60.0, task_name="Unknown"):
+            """Wrapper để thêm timeout cho mỗi API call"""
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(func, *args),
+                    timeout=timeout
+                )
+                return result
+            except asyncio.TimeoutError:
+                self.logger.error(f"Timeout fetching {task_name} for {self.ticker} after {timeout}s")
+                return None
+            except Exception as e:
+                self.logger.error(f"Error fetching {task_name} for {self.ticker}: {e}")
+                return None
+
+        # Tạo các task với timeout riêng
         tasks = [
-            asyncio.to_thread(get_free_cash_flow, self.ticker),  # Mặc định use_ttm=True
-            asyncio.to_thread(get_growth_estimate, self.ticker),
-            asyncio.to_thread(get_shares_outstanding, self.ticker),
-            asyncio.to_thread(get_earnings_per_share_Diluted, self.ticker),
-            asyncio.to_thread(price_board_stock, self.ticker),
-            asyncio.to_thread(lambda: get_market_cap(self.ticker)[0]),
-            asyncio.to_thread(get_industry_pe, self.ticker),  # Industry PE
+            fetch_with_timeout(get_free_cash_flow, self.ticker, timeout=60.0, task_name="FCF"),
+            fetch_with_timeout(get_growth_estimate, self.ticker, timeout=60.0, task_name="Growth"),
+            fetch_with_timeout(get_shares_outstanding, self.ticker, timeout=60.0, task_name="Shares"),
+            fetch_with_timeout(get_earnings_per_share_Diluted, self.ticker, timeout=60.0, task_name="EPS"),
+            fetch_with_timeout(price_board_stock, self.ticker, timeout=60.0, task_name="Price"),
+            fetch_with_timeout(lambda: get_market_cap(self.ticker)[0], timeout=60.0, task_name="Market Cap"),
+            fetch_with_timeout(get_industry_pe, self.ticker, timeout=60.0, task_name="Industry PE"),
         ]
 
-        self.logger.info("Fetching: FCF (TTM), Growth, Shares, EPS, Price, Market Cap, Industry PE (in parallel)...")
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        self.logger.info("Fetching: FCF (TTM), Growth, Shares, EPS, Price, Market Cap, Industry PE (in parallel with 60s timeout each)...")
+        
+        # Gather all tasks with overall timeout (5 minutes max)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=300.0  # 5 minutes total timeout
+            )
+        except asyncio.TimeoutError:
+            self.logger.error(f"Overall timeout fetching financial data for {self.ticker} after 5 minutes")
+            # Return None values to indicate failure
+            results = [None] * len(tasks)
 
-        # Check for errors
+        # Check for errors and log warnings
+        task_names = ['FCF', 'Growth', 'Shares', 'EPS', 'Price', 'Market Cap', 'Industry PE']
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                self.logger.error(f"Error in task {i}: {result}")
+                self.logger.error(f"Error in task {i} ({task_names[i] if i < len(task_names) else 'Unknown'}): {result}")
+            elif result is None:
+                self.logger.warning(f"Task {i} ({task_names[i] if i < len(task_names) else 'Unknown'}) returned None for {self.ticker} - may use cached data")
 
         return {
             'fcf': results[0],

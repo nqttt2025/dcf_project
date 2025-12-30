@@ -21,8 +21,12 @@ import asyncio
 import logging
 from collections import defaultdict
 from time import time
+import subprocess
+import json
 
-logger = logging.getLogger(__name__)
+# Setup service-specific logger với rotation và tối ưu hiệu năng
+from src.utils.service_logger import setup_service_logger
+logger = setup_service_logger('gateway', level=logging.INFO)
 
 # Rate limiting storage (in-memory, can be moved to Redis for distributed systems)
 _rate_limit_store = defaultdict(list)
@@ -279,7 +283,7 @@ async def api_health_check():
 @app.get("/api/stocks")
 async def list_stocks():
     """Lấy danh sách tất cả cổ phiếu"""
-    return await make_service_request(STOCK_SERVICE_URL, "GET", "/stocks")
+    return await make_service_request(STOCK_SERVICE_URL, "GET", "/stocks", timeout=30.0, max_retries=2)
 
 @app.get("/api/stocks/{ticker}")
 async def get_stock_detail(ticker: str):
@@ -400,6 +404,261 @@ async def get_sync_status(
     if ticker:
         url += f"?ticker={ticker}"
     return await make_service_request(DATABASE_SERVICE_URL, "GET", url, timeout=10.0)
+
+@app.get("/api/database/sync/jobs")
+async def list_sync_jobs():
+    """List all active sync jobs"""
+    return await make_service_request(DATABASE_SERVICE_URL, "GET", "/api/database/sync/jobs", timeout=10.0)
+
+# ==================== Logs Routes ====================
+
+# Service container name mapping
+SERVICE_CONTAINERS = {
+    "gateway": "dcf-gateway",
+    "dcf": "dcf-service",
+    "stock": "dcf-stock",
+    "database": "dcf-database",
+    "frontend": "dcf-frontend",
+    "postgres": "dcf-postgres",
+    "redis": "dcf-redis"
+}
+
+@app.get("/api/logs")
+async def get_logs(
+    service: Optional[str] = Query(None, description="Service name (gateway, dcf, stock, database, frontend, postgres, redis)"),
+    lines: Optional[int] = Query(100, description="Number of lines to retrieve (default: 100, max: 1000)")
+):
+    """
+    Get logs from Docker containers.
+    
+    Args:
+        service: Service name to get logs for. If None, returns logs for all services.
+        lines: Number of lines to retrieve (default: 100, max: 1000)
+    
+    Returns:
+        Dictionary with service names as keys and log lines as values
+    """
+    try:
+        # Limit lines to prevent excessive data
+        lines = min(max(1, lines), 1000)
+        
+        result = {}
+        
+        if service:
+            # Get logs for specific service
+            container_name = SERVICE_CONTAINERS.get(service.lower())
+            if not container_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown service: {service}. Available services: {', '.join(SERVICE_CONTAINERS.keys())}"
+                )
+            
+            try:
+                # Try to read from log file first (service_logger writes to /app/logs/app/{service}.log)
+                log_file_path = f"/app/logs/app/{service.lower()}.log"
+                
+                # If requesting gateway logs, read directly from file (same container)
+                if service.lower() == "gateway":
+                    try:
+                        with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
+                            all_lines = f.readlines()
+                            log_lines = [line.rstrip('\n') for line in all_lines[-lines:]]
+                        if log_lines:
+                            result[service] = {
+                                "logs": log_lines,
+                                "container": container_name,
+                                "lines": len(log_lines),
+                                "source": "log_file"
+                            }
+                        else:
+                            raise FileNotFoundError("Log file is empty")
+                    except (FileNotFoundError, IOError) as e:
+                        # Fallback to Docker logs
+                        pass
+                else:
+                    # For other services, use docker exec
+                    cmd_read_file = ["docker", "exec", container_name, "tail", "-n", str(lines), log_file_path]
+                    process_file = await asyncio.create_subprocess_exec(
+                        *cmd_read_file,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout_file, stderr_file = await process_file.communicate()
+                    
+                    if process_file.returncode == 0 and stdout_file and stdout_file.strip():
+                        log_output = stdout_file.decode('utf-8', errors='replace')
+                        log_lines = [line.rstrip('\n') for line in log_output.split('\n') if line.strip()]
+                        if log_lines:
+                            result[service] = {
+                                "logs": log_lines,
+                                "container": container_name,
+                                "lines": len(log_lines),
+                                "source": "log_file"
+                            }
+                        else:
+                            raise FileNotFoundError("Log file is empty")
+                
+                # If we didn't set result yet, fallback to Docker logs
+                if service not in result:
+                    # Fallback to Docker logs if file doesn't exist
+                    cmd = ["docker", "logs", "--tail", str(lines), "--timestamps", container_name]
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+                    
+                    if process.returncode == 0:
+                        log_output = stdout.decode('utf-8', errors='replace')
+                        result[service] = {
+                            "logs": log_output.split('\n') if log_output else [],
+                            "container": container_name,
+                            "lines": len(log_output.split('\n')) if log_output else 0,
+                            "source": "docker_logs"
+                        }
+                    else:
+                        error_msg = stderr.decode('utf-8', errors='replace')
+                        # Provide user-friendly error messages
+                        if "No such file or directory" in error_msg or "No such container" in error_msg:
+                            friendly_msg = "No logs available for this service. The service may not have generated any logs yet."
+                        elif "permission denied" in error_msg.lower():
+                            friendly_msg = "Permission denied. Unable to access logs for this service."
+                        else:
+                            friendly_msg = f"Unable to retrieve logs: {error_msg[:100]}"
+                        
+                        result[service] = {
+                            "logs": [],
+                            "error": friendly_msg,
+                            "container": container_name,
+                            "lines": 0
+                        }
+            except Exception as e:
+                error_str = str(e)
+                # Provide user-friendly error messages
+                if "No such file or directory" in error_str or "No such container" in error_str:
+                    friendly_msg = "No logs available for this service. The service may not have generated any logs yet."
+                elif "permission denied" in error_str.lower():
+                    friendly_msg = "Permission denied. Unable to access logs for this service."
+                else:
+                    friendly_msg = f"Unable to retrieve logs: {error_str[:100]}"
+                
+                result[service] = {
+                    "logs": [],
+                    "error": friendly_msg,
+                    "container": container_name,
+                    "lines": 0
+                }
+        else:
+            # Get logs for all services
+            for svc_name, container_name in SERVICE_CONTAINERS.items():
+                try:
+                    log_file_path = f"/app/logs/app/{svc_name.lower()}.log"
+                    
+                    # If gateway, read directly from file (same container)
+                    if svc_name.lower() == "gateway":
+                        try:
+                            with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
+                                all_lines = f.readlines()
+                                log_lines = [line.rstrip('\n') for line in all_lines[-lines:]]
+                            if log_lines:
+                                result[svc_name] = {
+                                    "logs": log_lines,
+                                    "container": container_name,
+                                    "lines": len(log_lines),
+                                    "source": "log_file"
+                                }
+                            else:
+                                raise FileNotFoundError("Log file is empty")
+                        except (FileNotFoundError, IOError):
+                            # Fallback to Docker logs
+                            pass
+                    else:
+                        # For other services, use docker exec to read log file
+                        cmd_read_file = ["docker", "exec", container_name, "tail", "-n", str(lines), log_file_path]
+                        process_file = await asyncio.create_subprocess_exec(
+                            *cmd_read_file,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        stdout_file, stderr_file = await process_file.communicate()
+                        
+                        if process_file.returncode == 0 and stdout_file and stdout_file.strip():
+                            log_output = stdout_file.decode('utf-8', errors='replace')
+                            log_lines = [line.rstrip('\n') for line in log_output.split('\n') if line.strip()]
+                            if log_lines:
+                                result[svc_name] = {
+                                    "logs": log_lines,
+                                    "container": container_name,
+                                    "lines": len(log_lines),
+                                    "source": "log_file"
+                                }
+                            else:
+                                raise FileNotFoundError("Log file is empty")
+                    
+                    # If we didn't set result yet, fallback to Docker logs
+                    if svc_name not in result:
+                        cmd = ["docker", "logs", "--tail", str(lines), "--timestamps", container_name]
+                        process = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        stdout, stderr = await process.communicate()
+                        
+                        if process.returncode == 0:
+                            log_output = stdout.decode('utf-8', errors='replace')
+                            log_lines = [line.rstrip('\n') for line in log_output.split('\n') if line.strip()]
+                            result[svc_name] = {
+                                "logs": log_lines,
+                                "container": container_name,
+                                "lines": len(log_lines),
+                                "source": "docker_logs"
+                            }
+                        else:
+                            error_msg = stderr.decode('utf-8', errors='replace')
+                            # Provide user-friendly error messages
+                        if "No such file or directory" in error_msg or "No such container" in error_msg:
+                            friendly_msg = "No logs available for this service. The service may not have generated any logs yet."
+                        elif "permission denied" in error_msg.lower():
+                            friendly_msg = "Permission denied. Unable to access logs for this service."
+                        else:
+                            friendly_msg = f"Unable to retrieve logs: {error_msg[:100]}"
+                        
+                        result[svc_name] = {
+                            "logs": [],
+                            "error": friendly_msg,
+                            "container": container_name,
+                            "lines": 0
+                        }
+                except Exception as e:
+                    error_str = str(e)
+                    # Provide user-friendly error messages
+                    if "No such file or directory" in error_str or "No such container" in error_str:
+                        friendly_msg = "No logs available for this service. The service may not have generated any logs yet."
+                    elif "permission denied" in error_str.lower():
+                        friendly_msg = "Permission denied. Unable to access logs for this service."
+                    else:
+                        friendly_msg = f"Unable to retrieve logs: {error_str[:100]}"
+                    
+                    result[svc_name] = {
+                        "logs": [],
+                        "error": friendly_msg,
+                        "container": container_name,
+                        "lines": 0
+                    }
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "service": service,
+            "lines": lines,
+            "logs": result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving logs: {str(e)}")
 
 # ==================== Monitoring & Architecture Routes ====================
 
