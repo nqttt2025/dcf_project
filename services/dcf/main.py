@@ -46,6 +46,9 @@ def health_check():
     """Health check endpoint"""
     return create_health_response("dcf-service", include_database=True)
 
+# Semaphore to limit concurrent analyses
+_analysis_semaphore = asyncio.Semaphore(10)  # Max 10 concurrent analyses
+
 @app.post("/analyze/{ticker}")
 async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
     """Chạy phân tích DCF cho một cổ phiếu"""
@@ -55,6 +58,14 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
     existing_status = redis_client.get_analysis_status(ticker)
     if existing_status and existing_status.get('status') in ['running', 'processing']:
         raise HTTPException(status_code=400, detail=f'Analysis already running for {ticker}')
+    
+    # Check concurrent limit
+    running_count = len(redis_client.get_all_running_analyses())
+    if running_count >= 10:
+        raise HTTPException(
+            status_code=503, 
+            detail=f'Service busy: Maximum 10 concurrent analyses allowed. Currently running: {running_count}'
+        )
     
     # Check if config exists
     config_file = config_dir / f'{ticker}.cfg'
@@ -71,13 +82,18 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
         started_at=started_at
     )
     
-    # Run analysis in background
-    background_tasks.add_task(perform_analysis, ticker, str(config_file), started_at)
+    # Run analysis in background with semaphore
+    async def run_with_semaphore():
+        async with _analysis_semaphore:
+            await perform_analysis(ticker, str(config_file), started_at)
+    
+    background_tasks.add_task(run_with_semaphore)
     
     return {
         'message': f'Analysis started for {ticker}',
         'ticker': ticker,
-        'status': 'running'
+        'status': 'running',
+        'queue_position': running_count
     }
 
 async def perform_analysis(ticker: str, config_file: str, started_at: str):

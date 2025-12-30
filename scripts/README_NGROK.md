@@ -82,7 +82,9 @@ docker ps | grep frontend
 ### Ngrok không khởi động
 Kiểm tra log:
 ```bash
-cat /tmp/ngrok_8081.log
+cat logs/ngrok/ngrok_8081.log
+# hoặc
+tail -f logs/ngrok/ngrok_8081.log
 ```
 
 ### Không thể lấy URL

@@ -20,3 +20,4 @@ data/results/*.text
 data/cache/
 data/cache/*.json
 config/ssl/
+logs/ngrok/*.log

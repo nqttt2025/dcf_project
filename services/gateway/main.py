@@ -12,10 +12,20 @@ else:
     project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 import httpx
 from typing import Optional
 from datetime import datetime
+import asyncio
+import logging
+from collections import defaultdict
+from time import time
+
+logger = logging.getLogger(__name__)
+
+# Rate limiting storage (in-memory, can be moved to Redis for distributed systems)
+_rate_limit_store = defaultdict(list)
 
 # Import common utilities after path setup
 from services.common import (
@@ -30,11 +40,73 @@ app = FastAPI(title="DCF Analysis API Gateway")
 # Setup CORS
 setup_cors(app)
 
+# Rate limiting middleware
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Simple rate limiting middleware"""
+    # Skip rate limiting for health checks
+    if request.url.path in ["/health", "/api/health"]:
+        return await call_next(request)
+    
+    # Rate limit for DCF analysis endpoints
+    if request.url.path.startswith("/api/stocks/") and request.method == "POST":
+        # Limit to 10 requests per minute per IP
+        client_ip = request.client.host if request.client else "unknown"
+        current_time = time()
+        minute_ago = current_time - 60
+        
+        # Clean old entries
+        _rate_limit_store[client_ip] = [
+            t for t in _rate_limit_store[client_ip] if t > minute_ago
+        ]
+        
+        # Check limit
+        if len(_rate_limit_store[client_ip]) >= 10:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "detail": "Rate limit exceeded. Maximum 10 analysis requests per minute.",
+                    "retry_after": 60
+                }
+            )
+        
+        # Add current request
+        _rate_limit_store[client_ip].append(current_time)
+    
+    return await call_next(request)
+
 # Get service URLs
 service_urls = get_service_urls()
 DCF_SERVICE_URL = service_urls["dcf"]
 STOCK_SERVICE_URL = service_urls["stock"]
 DATABASE_SERVICE_URL = service_urls["database"]
+
+# Shared HTTP client with connection pooling
+_http_client: Optional[httpx.AsyncClient] = None
+_request_semaphore = asyncio.Semaphore(50)  # Max 50 concurrent requests to services
+
+def get_http_client() -> httpx.AsyncClient:
+    """Get or create shared HTTP client with connection pooling"""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            limits=httpx.Limits(
+                max_keepalive_connections=50,  # Increased for better concurrency
+                max_connections=200,  # Increased for high load
+                keepalive_expiry=60.0  # Longer keepalive
+            ),
+            follow_redirects=True
+        )
+    return _http_client
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close HTTP client on shutdown"""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
 
 
 async def make_service_request(
@@ -42,10 +114,12 @@ async def make_service_request(
     method: str = "GET",
     endpoint: str = "",
     timeout: float = 10.0,
-    json_data: Optional[dict] = None
+    json_data: Optional[dict] = None,
+    max_retries: int = 3,
+    retry_delay: float = 1.0
 ):
     """
-    Make a request to a microservice.
+    Make a request to a microservice with retry logic and connection pooling.
     
     Args:
         service_url: Base URL of the service
@@ -53,16 +127,32 @@ async def make_service_request(
         endpoint: Endpoint path (e.g., "/stocks")
         timeout: Request timeout in seconds
         json_data: Optional JSON data for POST requests
+        max_retries: Maximum number of retry attempts (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 1.0)
     
     Returns:
         Response JSON data
     
     Raises:
-        HTTPException: If request fails
+        HTTPException: If request fails after all retries
     """
-    try:
-        async with httpx.AsyncClient() as client:
-            url = f"{service_url}{endpoint}"
+    service_name = service_url.split("://")[1].split(":")[0] if "://" in service_url else "service"
+    url = f"{service_url}{endpoint}"
+    client = get_http_client()
+    
+    last_exception = None
+    
+    # Use semaphore to limit concurrent requests
+    async with _request_semaphore:
+        for attempt in range(max_retries):
+            try:
+            # Use exponential backoff for retries
+            if attempt > 0:
+                delay = retry_delay * (2 ** (attempt - 1))
+                logger.info(f"Retrying {service_name} request (attempt {attempt + 1}/{max_retries}) after {delay}s")
+                await asyncio.sleep(delay)
+            
+            # Make request
             if method.upper() == "GET":
                 response = await client.get(url, timeout=timeout)
             elif method.upper() == "POST":
@@ -70,6 +160,7 @@ async def make_service_request(
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
             
+            # Check response status
             if response.status_code not in [200, 201]:
                 error_detail = "Unknown error"
                 try:
@@ -77,17 +168,70 @@ async def make_service_request(
                     error_detail = error_data.get("detail", str(response.status_code))
                 except:
                     error_detail = f"HTTP {response.status_code}: {response.text[:200]}"
-                raise HTTPException(status_code=response.status_code, detail=error_detail)
+                
+                # Retry on 5xx errors, but not on 4xx
+                if response.status_code >= 500 and attempt < max_retries - 1:
+                    logger.warning(f"{service_name} returned {response.status_code}, retrying...")
+                    last_exception = HTTPException(status_code=response.status_code, detail=error_detail)
+                    continue
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=error_detail)
+            
+            # Success - return response
             return response.json()
-    except httpx.TimeoutException as e:
-        service_name = service_url.split("://")[1].split(":")[0] if "://" in service_url else "service"
-        raise HTTPException(status_code=504, detail=f"{service_name} service timeout: {str(e)}")
-    except httpx.RequestError as e:
-        service_name = service_url.split("://")[1].split(":")[0] if "://" in service_url else "service"
-        raise HTTPException(status_code=503, detail=f"{service_name} service unavailable: {str(e)}")
-    except Exception as e:
-        service_name = service_url.split("://")[1].split(":")[0] if "://" in service_url else "service"
-        raise HTTPException(status_code=500, detail=f"Error calling {service_name} service: {str(e)}")
+            
+        except httpx.TimeoutException as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                logger.warning(f"{service_name} timeout (attempt {attempt + 1}/{max_retries}), retrying...")
+                continue
+            else:
+                raise HTTPException(
+                    status_code=504, 
+                    detail=f"{service_name} service timeout after {max_retries} attempts: {str(e)}"
+                )
+        except httpx.ConnectError as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                logger.warning(f"{service_name} connection error (attempt {attempt + 1}/{max_retries}), retrying...")
+                continue
+            else:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{service_name} service unavailable: All connection attempts failed. Service may be overloaded or down."
+                )
+        except httpx.RequestError as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                logger.warning(f"{service_name} request error (attempt {attempt + 1}/{max_retries}), retrying...")
+                continue
+            else:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{service_name} service unavailable: {str(e)}"
+                )
+        except HTTPException:
+            # Re-raise HTTP exceptions (already handled)
+            raise
+        except Exception as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                logger.warning(f"{service_name} error (attempt {attempt + 1}/{max_retries}), retrying...")
+                continue
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error calling {service_name} service after {max_retries} attempts: {str(e)}"
+                )
+    
+    # If we get here, all retries failed
+    if last_exception:
+        if isinstance(last_exception, HTTPException):
+            raise last_exception
+        raise HTTPException(
+            status_code=503,
+            detail=f"{service_name} service unavailable: All {max_retries} connection attempts failed"
+        )
 
 @app.get("/")
 def root():
@@ -162,11 +306,14 @@ async def get_system_status():
 @app.post("/api/stocks/{ticker}/run")
 async def run_dcf_analysis(ticker: str):
     """Chạy phân tích DCF cho một cổ phiếu"""
+    # Increase retries and timeout for DCF analysis (can take longer)
     return await make_service_request(
         DCF_SERVICE_URL,
         "POST",
         f"/analyze/{ticker}",
-        timeout=300.0
+        timeout=300.0,
+        max_retries=5,
+        retry_delay=2.0
     )
 
 @app.get("/api/analysis/{ticker}")
@@ -175,7 +322,10 @@ async def get_analysis_result(ticker: str):
     return await make_service_request(
         DCF_SERVICE_URL,
         "GET",
-        f"/analysis/{ticker}"
+        f"/analysis/{ticker}",
+        timeout=30.0,
+        max_retries=3,
+        retry_delay=1.0
     )
 
 # ==================== Database Service Routes ====================
@@ -337,7 +487,13 @@ async def get_monitoring_data():
         # Get DCF service status (running analyses)
         dcf_status = {}
         try:
-            dcf_status_response = await make_service_request(DCF_SERVICE_URL, "GET", "/status", timeout=5.0)
+            dcf_status_response = await make_service_request(
+                DCF_SERVICE_URL, 
+                "GET", 
+                "/status", 
+                timeout=10.0,
+                max_retries=2  # Fewer retries for status checks
+            )
             dcf_status = dcf_status_response
         except Exception as e:
             dcf_status = {"error": str(e)}
@@ -345,7 +501,13 @@ async def get_monitoring_data():
         # Get Stock service status
         stock_status = {}
         try:
-            stock_status_response = await make_service_request(STOCK_SERVICE_URL, "GET", "/status", timeout=5.0)
+            stock_status_response = await make_service_request(
+                STOCK_SERVICE_URL, 
+                "GET", 
+                "/status", 
+                timeout=10.0,
+                max_retries=2
+            )
             stock_status = stock_status_response
         except Exception as e:
             stock_status = {"error": str(e)}
@@ -354,7 +516,13 @@ async def get_monitoring_data():
         db_stats = {}
         try:
             try:
-                db_stats_response = await make_service_request(DATABASE_SERVICE_URL, "GET", "/api/database/stats", timeout=5.0)
+                db_stats_response = await make_service_request(
+                    DATABASE_SERVICE_URL, 
+                    "GET", 
+                    "/api/database/stats", 
+                    timeout=10.0,
+                    max_retries=2
+                )
             except HTTPException:
                 # Database service unavailable - continue without it
                 db_stats_response = {"error": "Database service unavailable"}

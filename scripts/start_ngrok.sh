@@ -2,7 +2,13 @@
 # Script để khởi động ngrok cho port 8081
 
 PORT=${1:-8081}
-NGROK_LOG="/tmp/ngrok_${PORT}.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+NGROK_LOG_DIR="$PROJECT_ROOT/logs/ngrok"
+NGROK_LOG="$NGROK_LOG_DIR/ngrok_${PORT}.log"
+
+# Tạo thư mục log nếu chưa có
+mkdir -p "$NGROK_LOG_DIR"
 
 echo "=========================================="
 echo "Khởi động ngrok cho port $PORT"
@@ -27,24 +33,39 @@ if ! netstat -tln 2>/dev/null | grep -q ":$PORT " && ! ss -tln 2>/dev/null | gre
     echo ""
 fi
 
-# Kiểm tra ngrok đã chạy chưa
-if pgrep -f "ngrok.*$PORT" > /dev/null; then
-    echo "⚠️  ngrok đã đang chạy cho port $PORT"
+# Kiểm tra ngrok đã chạy chưa (kiểm tra API thay vì process)
+if curl -s http://localhost:4040/api/tunnels > /dev/null 2>&1; then
+    echo "⚠️  ngrok đã đang chạy"
     echo ""
+    
+    # Lấy URL hiện tại
+    CURRENT_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys, json; d=json.load(sys.stdin); print(d['tunnels'][0]['public_url'] if d.get('tunnels') else '')" 2>/dev/null)
+    if [ -n "$CURRENT_URL" ]; then
+        echo "URL hiện tại: $CURRENT_URL"
+        echo ""
+    fi
+    
     echo "Để xem URL hiện tại:"
-    echo "  curl http://localhost:4040/api/tunnels 2>/dev/null | grep -o https:// | head -1"
+    echo "  make ngrok-status"
     echo ""
     echo "Để dừng ngrok:"
-    echo "  pkill -f \"ngrok.*$PORT\""
+    echo "  make ngrok-stop"
     echo ""
     read -p "Bạn có muốn dừng và khởi động lại? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        pkill -f "ngrok.*$PORT"
+        pkill ngrok 2>/dev/null
         sleep 2
     else
         exit 0
     fi
+elif pgrep -f "ngrok.*$PORT" > /dev/null; then
+    # Có process nhưng API không phản hồi - dọn dẹp
+    echo "⚠️  Phát hiện process ngrok cũ nhưng không hoạt động"
+    echo "   Đang dọn dẹp..."
+    # Kill chỉ các process ngrok thực sự, không phải script này
+    pkill -f "^ngrok http" 2>/dev/null || true
+    sleep 2
 fi
 
 # Khởi động ngrok
