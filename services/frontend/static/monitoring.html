@@ -1766,8 +1766,8 @@
                             name: 'Gateway',
                             type: 'fastapi',
                             port: '8000',
-                            description: 'API Gateway - Routes requests to microservices (HTTPS)',
-                            dependencies: ['DCF Service', 'Stock Service', 'Database Service', 'Sync Service'],
+                            description: 'API Gateway - Routes requests to microservices (HTTPS), provides Redis monitoring APIs',
+                            dependencies: ['DCF Service', 'Stock Service', 'Database Service', 'Sync Service', 'Redis'],
                             requestPaths: [
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/health' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks' },
@@ -1776,7 +1776,10 @@
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/stocks/{ticker}/status' },
                                 { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/dcf/analyze/{ticker}' },
                                 { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/sync/jobs' },
-                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/sync/jobs/{job_id}/run' }
+                                { path: 'Frontend → Gateway', method: 'POST', endpoint: '/api/sync/jobs/{job_id}/run' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/redis/info' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/redis/stats' },
+                                { path: 'Frontend → Gateway', method: 'GET', endpoint: '/api/redis/cache-summary' }
                             ]
                         },
                         {
@@ -1826,7 +1829,7 @@
                             name: 'Sync Service',
                             type: 'fastapi',
                             port: '8004',
-                            description: 'Handles data synchronization jobs (current_price, market_data, financial_data, shares_outstanding, base_pe)',
+                            description: 'Handles data synchronization jobs (current_price, market_data, financial_data, shares_outstanding, base_pe, growth_metrics). Uses Redis for persistent job storage.',
                             dependencies: ['Database Service', 'PostgreSQL', 'Redis'],
                             requestPaths: [
                                 { path: 'Gateway → Sync Service', method: 'GET', endpoint: '/api/jobs' },
@@ -1835,9 +1838,10 @@
                                 { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/jobs/{job_id}/run' },
                                 { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/jobs/{job_id}/stop' },
                                 { path: 'Gateway → Sync Service', method: 'GET', endpoint: '/api/jobs/{job_id}/executions/{execution_id}' },
+                                { path: 'Gateway → Sync Service', method: 'POST', endpoint: '/api/sync/growth-metrics' },
                                 { path: 'Sync Service → Database Service', method: 'POST', endpoint: '/api/database/sync/*' },
                                 { path: 'Sync Service → PostgreSQL', method: 'SQL', endpoint: 'Read operations' },
-                                { path: 'Sync Service → Redis', method: 'SET/GET', endpoint: 'Cache update operations' }
+                                { path: 'Sync Service → Redis', method: 'SET/GET', endpoint: 'Job storage (sync:jobs, sync:executions, sync:logs)' }
                             ]
                         },
                         {
@@ -1857,13 +1861,26 @@
                             name: 'Redis',
                             type: 'cache',
                             port: '6379',
-                            description: 'Redis cache for session and temporary data',
+                            description: 'Redis cache for caching (market data, financial data, stock info), status tracking (analysis status), and job storage (sync jobs, executions, logs)',
                             dependencies: [],
                             requestPaths: [
-                                { path: 'DCF Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
-                                { path: 'Stock Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
-                                { path: 'Database Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL' },
-                                { path: 'Sync Service → Redis', method: 'Redis', endpoint: 'SET/GET (Cache updates)' }
+                                { path: 'DCF Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL (cache, status)' },
+                                { path: 'Stock Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL (cache)' },
+                                { path: 'Database Service → Redis', method: 'Redis', endpoint: 'SET/GET/DEL (cache)' },
+                                { path: 'Sync Service → Redis', method: 'Redis', endpoint: 'SET/GET (jobs, executions, logs, cache)' },
+                                { path: 'Gateway → Redis', method: 'Redis', endpoint: 'INFO, DBSIZE, KEYS (monitoring)' },
+                                { path: 'Redis Commander → Redis', method: 'Redis', endpoint: 'Full management' }
+                            ]
+                        },
+                        {
+                            name: 'Redis Commander',
+                            type: 'tool',
+                            port: '8085',
+                            description: 'Web-based Redis management GUI for monitoring and debugging Redis data',
+                            dependencies: ['Redis'],
+                            requestPaths: [
+                                { path: 'Redis Commander → Redis', method: 'Redis', endpoint: 'Full database management' },
+                                { path: 'Browser → Redis Commander', method: 'HTTP', endpoint: 'Web UI' }
                             ]
                         }
                     ],
@@ -1873,7 +1890,7 @@
                             from: 'Frontend',
                             to: 'Gateway',
                             protocol: 'HTTPS',
-                            endpoints: ['/api/*', '/api/health'],
+                            endpoints: ['/api/*', '/api/health', '/api/redis/*'],
                             requestPaths: [
                                 'Frontend → Gateway: GET /api/health',
                                 'Frontend → Gateway: GET /api/stocks',
@@ -1882,7 +1899,10 @@
                                 'Frontend → Gateway: GET /api/stocks/{ticker}/status',
                                 'Frontend → Gateway: POST /api/dcf/analyze/{ticker}',
                                 'Frontend → Gateway: GET /api/sync/jobs',
-                                'Frontend → Gateway: POST /api/sync/jobs/{job_id}/run'
+                                'Frontend → Gateway: POST /api/sync/jobs/{job_id}/run',
+                                'Frontend → Gateway: GET /api/redis/info',
+                                'Frontend → Gateway: GET /api/redis/stats',
+                                'Frontend → Gateway: GET /api/redis/cache-summary'
                             ]
                         },
                         {
@@ -1965,8 +1985,11 @@
                             from: 'Sync Service',
                             to: 'Redis',
                             protocol: 'Redis',
-                            endpoints: ['Cache update operations'],
+                            endpoints: ['Job storage', 'Cache operations'],
                             requestPaths: [
+                                'Sync Service → Redis: SET sync:jobs:* (job storage)',
+                                'Sync Service → Redis: LPUSH sync:executions:* (execution history)',
+                                'Sync Service → Redis: RPUSH sync:logs:* (execution logs)',
                                 'Sync Service → Redis: SET cache (market_data, financial_data, shares, stock_info)',
                                 'Sync Service → Redis: GET cache'
                             ]
@@ -2042,6 +2065,31 @@
                                 'Database Service → Redis: GET cache',
                                 'Database Service → Redis: DEL cache'
                             ]
+                        },
+                        {
+                            id: 'gateway-redis',
+                            from: 'Gateway',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Monitoring operations'],
+                            requestPaths: [
+                                'Gateway → Redis: INFO (server info)',
+                                'Gateway → Redis: DBSIZE (key count)',
+                                'Gateway → Redis: KEYS (cache summary)',
+                                'Gateway → Redis: MEMORY STATS (memory usage)'
+                            ]
+                        },
+                        {
+                            id: 'redis-commander-redis',
+                            from: 'Redis Commander',
+                            to: 'Redis',
+                            protocol: 'Redis',
+                            endpoints: ['Full management'],
+                            requestPaths: [
+                                'Redis Commander → Redis: All Redis commands',
+                                'Redis Commander → Redis: Key browser',
+                                'Redis Commander → Redis: Data editor'
+                            ]
                         }
                     ]
                 }
@@ -2057,7 +2105,9 @@
                     dcf: { status: 'unknown', running_analyses: 0, analyses: [] },
                     stock: { status: 'unknown' },
                     database: { status: 'unknown' },
-                    'sync-service': { status: 'unknown', jobs: [], running_jobs: 0 }
+                    'sync-service': { status: 'unknown', jobs: [], running_jobs: 0 },
+                    redis: { status: 'unknown' },
+                    'redis-commander': { status: 'unknown' }
                 }
             };
         }
@@ -2141,6 +2191,15 @@
                     icon: '⚡', 
                     label: 'Redis Cache',
                     borderColor: '#047857'
+                },
+                'tool': { 
+                    color: '#3B82F6',  // Blue for management tools
+                    gradient: ['#3B82F6', '#2563EB'],
+                    glow: 'rgba(59, 130, 246, 0.5)',
+                    shape: 'box', 
+                    icon: '🛠️', 
+                    label: 'Management Tools',
+                    borderColor: '#1D4ED8'
                 }
             };
 
@@ -2166,7 +2225,7 @@
                 if (service.name === 'Frontend') level = 0;
                 else if (service.name === 'Gateway') level = 1;
                 else if (['DCF Service', 'Stock Service', 'Database Service', 'Sync Service'].includes(service.name)) level = 2;
-                else if (['PostgreSQL', 'Redis'].includes(service.name)) level = 3;
+                else if (['PostgreSQL', 'Redis', 'Redis Commander'].includes(service.name)) level = 3;
                 
                 // Compact label without line breaks to prevent wrapping issues
                 let label = `${style.icon} ${service.name}`;
@@ -2432,6 +2491,7 @@
             if (type === 'fastapi') return 'service';
             if (type === 'database') return 'database';
             if (type === 'cache') return 'cache';
+            if (type === 'tool') return 'tool';
             return 'service';
         }
 
@@ -2442,7 +2502,8 @@
                 'nginx': 45,
                 'fastapi': 50,
                 'database': 55,
-                'cache': 40
+                'cache': 40,
+                'tool': 35
             };
             return sizes[type] || 45;
         }

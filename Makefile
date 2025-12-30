@@ -284,11 +284,26 @@ docker-logs-database:
 docker-logs-postgres:
 	@./scripts/docker.sh logs-postgres
 
+docker-logs-redis:
+	@./scripts/docker.sh logs-redis
+
+docker-logs-redis-commander:
+	@./scripts/docker.sh logs-redis-commander
+
+docker-logs-sync:
+	@./scripts/docker.sh logs-sync
+
 docker-exec-database:
 	@./scripts/docker.sh exec-database
 
 docker-exec-postgres:
 	@./scripts/docker.sh exec-postgres
+
+docker-exec-redis:
+	@./scripts/docker.sh exec-redis
+
+docker-exec-sync:
+	@./scripts/docker.sh exec-sync
 
 docker-db-start:
 	@./scripts/docker.sh db-start
@@ -351,6 +366,38 @@ docker-dev-logs:
 
 docker-dev-restart:
 	@./scripts/docker.sh dev-restart
+
+# ============================================================================
+# Redis Commands
+# ============================================================================
+
+redis-cli:
+	@echo "Connecting to Redis CLI..."
+	@docker exec -it dcf-redis redis-cli
+
+redis-info:
+	@echo "Redis Server Info:"
+	@curl -sk https://localhost:8000/api/redis/info | python3 -m json.tool 2>/dev/null || echo "Error: Cannot connect to API"
+
+redis-stats:
+	@echo "Redis Sync Stats:"
+	@curl -sk https://localhost:8000/api/redis/stats | python3 -m json.tool 2>/dev/null || echo "Error: Cannot connect to API"
+
+redis-cache:
+	@echo "Redis Cache Summary:"
+	@curl -sk https://localhost:8000/api/redis/cache-summary | python3 -m json.tool 2>/dev/null || echo "Error: Cannot connect to API"
+
+redis-keys:
+	@echo "Redis Keys:"
+	@docker exec dcf-redis redis-cli keys '*' 2>/dev/null | head -50 || echo "Error: Cannot connect to Redis"
+
+redis-flush:
+	@echo "⚠️  This will delete ALL data in Redis!"
+	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] && docker exec dcf-redis redis-cli FLUSHALL || echo "Aborted"
+
+redis-monitor:
+	@echo "Opening Redis Monitor (real-time commands)... Press Ctrl+C to stop"
+	@docker exec -it dcf-redis redis-cli monitor
 
 # ============================================================================
 # Backend Development Commands
@@ -478,6 +525,18 @@ help:
 	@echo "  make docker-exec-database - Exec into database container"
 	@echo "  make docker-exec-postgres - Exec into postgres container"
 	@echo ""
+	@echo "Redis Commands:"
+	@echo "  make redis-cli          - Connect to Redis CLI"
+	@echo "  make redis-info         - Show Redis server info"
+	@echo "  make redis-stats        - Show sync statistics"
+	@echo "  make redis-cache        - Show cached data summary"
+	@echo "  make redis-keys         - List all Redis keys"
+	@echo "  make redis-monitor      - Monitor Redis commands (real-time)"
+	@echo "  make redis-flush        - ⚠️  Delete all Redis data"
+	@echo "  make docker-logs-redis  - View Redis logs"
+	@echo "  make docker-logs-redis-commander - View Redis Commander logs"
+	@echo "  make docker-exec-redis  - Exec into Redis container"
+	@echo ""
 	@echo "Health Check:"
 	@echo "  make health-check         - Check health status of all services"
 	@echo ""
@@ -496,4 +555,4 @@ help:
 	@echo "Note: Most commands delegate to scripts/ for better maintainability."
 	@echo "      See scripts/*.sh for implementation details."
 
-.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python test-makefile test-makefile-commands test-makefile-functionality test-makefile-all lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install ngrok ngrok-start ngrok-stop ngrok-status ngrok-restart docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit
+.PHONY: test ut ft st complete all test-config test-cache test-result test-dcf test-scripts test-scripts-bash test-scripts-python test-makefile test-makefile-commands test-makefile-functionality test-makefile-all lint pylint flake8 clean clean-reports clean-cache clean-logs clean-results clean-data clean-all help dcf dcf-all dcf-all-fast dcf-help pe pe-all pe-help web web-install ngrok ngrok-start ngrok-stop ngrok-status ngrok-restart docker-build docker-rebuild docker-up docker-down docker-logs docker-logs-follow docker-logs-gateway docker-logs-dcf docker-logs-stock docker-logs-frontend docker-logs-database docker-logs-postgres docker-logs-redis docker-logs-redis-commander docker-logs-sync docker-restart docker-clean docker-clean-all docker-ps docker-exec-gateway docker-exec-dcf docker-exec-stock docker-exec-frontend docker-exec-database docker-exec-postgres docker-exec-redis docker-exec-sync docker-db-start docker-db-stop docker-db-restart docker-db-status health-check docker-dev docker-dev-down docker-dev-logs docker-dev-restart backend-dev backend-gateway backend-dcf backend-stock get-version git-tag git-tag-patch git-tag-minor git-tag-major git-tag-from-commit redis-cli redis-info redis-stats redis-cache redis-keys redis-flush redis-monitor

@@ -260,11 +260,15 @@ cmd_up() {
     echo "  - DCF Service: http://localhost:8001"
     echo "  - Stock Service: http://localhost:8002"
     echo "  - Database Service: http://localhost:8003"
+    echo "  - Sync Service: http://localhost:8004"
     echo "  - PostgreSQL: localhost:5433 (host port, container uses 5432)"
+    echo "  - Redis: localhost:6379"
+    echo "  - Redis Commander: http://localhost:8085 (admin/dcf_redis_2024)"
     echo ""
     echo "View logs: make docker-logs"
     echo "Stop: make docker-down"
     echo "Database only: make docker-db-start"
+    echo "Redis info: make redis-info"
 }
 
 cmd_down() {
@@ -385,6 +389,9 @@ show_help() {
     echo "  logs-frontend - Frontend logs"
     echo "  logs-database - Database service logs"
     echo "  logs-postgres - PostgreSQL logs"
+    echo "  logs-redis  - Redis logs"
+    echo "  logs-redis-commander - Redis Commander logs"
+    echo "  logs-sync   - Sync service logs"
     echo ""
     echo "Cleanup:"
     echo "  clean       - Clean unused containers and images"
@@ -402,6 +409,8 @@ show_help() {
     echo "  exec-frontend - Exec into frontend container"
     echo "  exec-database - Exec into database container"
     echo "  exec-postgres - Exec into postgres container"
+    echo "  exec-redis   - Exec into redis container"
+    echo "  exec-sync    - Exec into sync-service container"
     echo ""
     echo "Database Management:"
     echo "  db-start    - Start database services (PostgreSQL + Database Service)"
@@ -463,6 +472,15 @@ main() {
         logs-postgres)
             docker-compose logs -f postgres
             ;;
+        logs-redis)
+            docker-compose logs -f redis
+            ;;
+        logs-redis-commander)
+            docker-compose logs -f redis-commander
+            ;;
+        logs-sync)
+            docker-compose logs -f sync-service
+            ;;
         restart)
             log_info "Restarting Docker containers..."
             # Get project version from git tag (single source of truth)
@@ -512,6 +530,12 @@ main() {
             ;;
         exec-postgres)
             docker-compose exec postgres /bin/sh
+            ;;
+        exec-redis)
+            docker-compose exec redis /bin/sh
+            ;;
+        exec-sync)
+            docker-compose exec sync-service /bin/bash
             ;;
         db-start)
             log_info "Starting database services (PostgreSQL + Database Service)..."

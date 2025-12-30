@@ -2,7 +2,8 @@
 # Health Check Script for DCF Project Services
 # Checks status and health of all microservices
 
-set -e
+# Don't exit on error - we want to check all services even if some fail
+# set -e
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,11 +20,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Service URLs
-GATEWAY_URL="${GATEWAY_URL:-http://localhost:8000}"
+# Service URLs (Gateway uses HTTPS)
+GATEWAY_URL="${GATEWAY_URL:-https://localhost:8000}"
 DCF_URL="${DCF_URL:-http://localhost:8001}"
 STOCK_URL="${STOCK_URL:-http://localhost:8002}"
 DATABASE_URL="${DATABASE_URL:-http://localhost:8003}"
+SYNC_URL="${SYNC_URL:-http://localhost:8004}"
 
 # Function to check HTTP endpoint
 check_service() {
@@ -33,8 +35,8 @@ check_service() {
     
     echo -n "  Checking ${service_name}... "
     
-    # Try to get health status
-    response=$(curl -s -w "\n%{http_code}" --max-time 5 "$endpoint" 2>/dev/null || echo -e "\n000")
+    # Try to get health status (-k for HTTPS with self-signed certs)
+    response=$(curl -sk -w "\n%{http_code}" --max-time 5 "$endpoint" 2>/dev/null || echo -e "\n000")
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
     
@@ -50,10 +52,10 @@ check_service() {
         return 0
     elif [ "$http_code" = "000" ]; then
         echo -e "${RED}✗ Unreachable${NC}"
-        return 1
+        return 0  # Don't fail - continue checking other services
     else
         echo -e "${YELLOW}⚠ Unhealthy (HTTP $http_code)${NC}"
-        return 1
+        return 0  # Don't fail - continue checking other services
     fi
 }
 
@@ -74,11 +76,13 @@ check_docker_containers() {
     # Check each service container
     containers=(
         "dcf-gateway:Gateway"
-        "dcf-dcf:DCF Service"
+        "dcf-service:DCF Service"
         "dcf-stock:Stock Service"
         "dcf-database:Database Service"
+        "dcf-sync-service:Sync Service"
         "dcf-postgres:PostgreSQL"
         "dcf-redis:Redis"
+        "dcf-redis-commander:Redis Commander"
         "dcf-frontend:Frontend"
     )
     
@@ -120,6 +124,7 @@ check_service_endpoints() {
     check_service "DCF Service" "$DCF_URL"
     check_service "Stock Service" "$STOCK_URL"
     check_service "Database Service" "$DATABASE_URL"
+    check_service "Sync Service" "$SYNC_URL"
 }
 
 # Function to check database connection
@@ -157,15 +162,31 @@ check_redis() {
             echo -e "  ${GREEN}✓${NC} Redis: Connected"
             
             # Get Redis info
-            redis_info=$(redis-cli -h localhost info stats 2>/dev/null | grep -E "keyspace|total_commands" | head -n 3 || echo "")
-            if [ -n "$redis_info" ]; then
-                echo "$redis_info" | sed 's/^/    /'
-            fi
+            echo -e "    Version: $(redis-cli -h localhost info server 2>/dev/null | grep redis_version | cut -d: -f2 | tr -d '\r')"
+            echo -e "    Memory: $(redis-cli -h localhost info memory 2>/dev/null | grep used_memory_human | cut -d: -f2 | tr -d '\r')"
+            echo -e "    Keys: $(redis-cli -h localhost dbsize 2>/dev/null | cut -d: -f2 | tr -d '\r')"
+            echo -e "    Clients: $(redis-cli -h localhost info clients 2>/dev/null | grep connected_clients | cut -d: -f2 | tr -d '\r')"
         else
             echo -e "  ${RED}✗${NC} Redis: Connection failed"
         fi
     else
-        echo -e "  ${YELLOW}⚠${NC} redis-cli not found, skipping direct Redis check"
+        # Try via API
+        echo -e "  ${YELLOW}⚠${NC} redis-cli not found, trying via API..."
+        api_response=$(curl -sk https://localhost:8000/api/redis/info 2>/dev/null)
+        if [ -n "$api_response" ] && echo "$api_response" | grep -q '"status".*"connected"'; then
+            echo -e "  ${GREEN}✓${NC} Redis: Connected (via API)"
+            echo "$api_response" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f\"    Version: {d.get('version','N/A')}\"); print(f\"    Memory: {d.get('memory',{}).get('used_memory_human','N/A')}\"); print(f\"    Keys: {d.get('keys',{}).get('total_keys','N/A')}\")" 2>/dev/null || true
+        else
+            echo -e "  ${YELLOW}⚠${NC} Redis: Unable to check status"
+        fi
+    fi
+    
+    # Check Redis Commander
+    echo -e "\n  ${YELLOW}Redis Commander:${NC}"
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:8085 2>/dev/null | grep -q "200"; then
+        echo -e "  ${GREEN}✓${NC} Redis Commander: http://localhost:8085 (admin/dcf_redis_2024)"
+    else
+        echo -e "  ${YELLOW}⚠${NC} Redis Commander: Not accessible"
     fi
 }
 
