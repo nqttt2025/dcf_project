@@ -1236,3 +1236,180 @@ def sync_base_pe(db: Session, ticker: Optional[str] = None) -> Dict:
             "error": str(e),
             "processed": 0
         }
+
+
+def sync_growth_metrics(db: Session, ticker: Optional[str] = None) -> Dict:
+    """
+    Calculate and sync growth metrics from financial_data table.
+    
+    This function calculates YoY growth rates for:
+    - Revenue growth
+    - Net profit growth
+    - Operating profit growth
+    - Free cash flow growth
+    
+    Note: This doesn't fetch from external API - it calculates from existing financial_data.
+    """
+    logger.info(f"Starting growth metrics calculation: ticker={ticker or 'all'}")
+    
+    try:
+        # Get stocks to process
+        if ticker:
+            stocks_query = text("SELECT id, ticker FROM stocks WHERE ticker = :ticker AND is_active = TRUE")
+            stocks = db.execute(stocks_query, {"ticker": ticker.upper()}).fetchall()
+        else:
+            stocks_query = text("SELECT id, ticker FROM stocks WHERE is_active = TRUE")
+            stocks = db.execute(stocks_query).fetchall()
+        
+        logger.info(f"Found {len(stocks)} active stock(s) to calculate growth metrics")
+        
+        results = {
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "skipped": 0,
+            "details": []
+        }
+        
+        if not stocks:
+            logger.warning("No active stocks found in database")
+            return {
+                "success": False,
+                "error": "No active stocks found in database",
+                "processed": 0
+            }
+        
+        for idx, stock in enumerate(stocks):
+            try:
+                stock_id = stock.id
+                stock_ticker = stock.ticker
+                logger.info(f"[{idx+1}/{len(stocks)}] Calculating growth metrics for {stock_ticker}")
+                
+                # Get financial data ordered by period_date for calculating YoY growth
+                # We need at least 2 periods to calculate growth
+                financial_query = text("""
+                    SELECT 
+                        id, period_type, period, period_date,
+                        revenue, net_profit, operating_profit, free_cash_flow
+                    FROM financial_data 
+                    WHERE stock_id = :stock_id 
+                      AND period_type = 'quarter'
+                    ORDER BY period_date DESC
+                    LIMIT 20
+                """)
+                financial_data = db.execute(financial_query, {"stock_id": stock_id}).fetchall()
+                
+                if not financial_data or len(financial_data) < 5:
+                    # Need at least 5 quarters (current + 4 quarters ago for YoY)
+                    logger.warning(f"Insufficient financial data for {stock_ticker} (need at least 5 quarters, have {len(financial_data) if financial_data else 0})")
+                    results["skipped"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "skipped",
+                        "reason": f"Insufficient data ({len(financial_data) if financial_data else 0} quarters)"
+                    })
+                    results["processed"] += 1
+                    continue
+                
+                # Calculate YoY growth (comparing to same quarter last year = 4 quarters ago)
+                inserted_count = 0
+                
+                for i, current in enumerate(financial_data):
+                    # Find the same quarter from last year (4 quarters ago)
+                    if i + 4 >= len(financial_data):
+                        break
+                    
+                    previous = financial_data[i + 4]
+                    
+                    # Calculate growth rates
+                    def calc_growth(current_val, previous_val):
+                        """Calculate YoY growth rate as decimal (0.1 = 10%)"""
+                        if previous_val is None or previous_val == 0:
+                            return None
+                        if current_val is None:
+                            return None
+                        return (current_val - previous_val) / abs(previous_val)
+                    
+                    revenue_growth = calc_growth(current.revenue, previous.revenue)
+                    net_profit_growth = calc_growth(current.net_profit, previous.net_profit)
+                    operating_profit_growth = calc_growth(current.operating_profit, previous.operating_profit)
+                    fcf_growth = calc_growth(current.free_cash_flow, previous.free_cash_flow)
+                    
+                    # Skip if all growths are None
+                    if all(g is None for g in [revenue_growth, net_profit_growth, operating_profit_growth, fcf_growth]):
+                        continue
+                    
+                    # Insert or update growth metrics
+                    upsert_query = text("""
+                        INSERT INTO growth_metrics (
+                            stock_id, period_date, period_type,
+                            revenue_growth_yoy, net_profit_growth_yoy,
+                            operating_profit_growth_yoy, fcf_growth_yoy,
+                            created_at, updated_at
+                        ) VALUES (
+                            :stock_id, :period_date, :period_type,
+                            :revenue_growth_yoy, :net_profit_growth_yoy,
+                            :operating_profit_growth_yoy, :fcf_growth_yoy,
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        )
+                        ON CONFLICT (stock_id, period_date, period_type)
+                        DO UPDATE SET
+                            revenue_growth_yoy = EXCLUDED.revenue_growth_yoy,
+                            net_profit_growth_yoy = EXCLUDED.net_profit_growth_yoy,
+                            operating_profit_growth_yoy = EXCLUDED.operating_profit_growth_yoy,
+                            fcf_growth_yoy = EXCLUDED.fcf_growth_yoy,
+                            updated_at = CURRENT_TIMESTAMP
+                    """)
+                    
+                    db.execute(upsert_query, {
+                        "stock_id": stock_id,
+                        "period_date": current.period_date,
+                        "period_type": current.period_type,
+                        "revenue_growth_yoy": revenue_growth,
+                        "net_profit_growth_yoy": net_profit_growth,
+                        "operating_profit_growth_yoy": operating_profit_growth,
+                        "fcf_growth_yoy": fcf_growth
+                    })
+                    inserted_count += 1
+                
+                db.commit()
+                
+                if inserted_count > 0:
+                    logger.info(f"Successfully calculated {inserted_count} growth metrics for {stock_ticker}")
+                    results["success"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "success",
+                        "records_inserted": inserted_count
+                    })
+                else:
+                    logger.warning(f"No growth metrics calculated for {stock_ticker}")
+                    results["skipped"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "skipped",
+                        "reason": "No valid growth metrics could be calculated"
+                    })
+                
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error calculating growth metrics for {stock_ticker}: {e}", exc_info=True)
+                results["failed"] += 1
+                results["details"].append({
+                    "ticker": stock_ticker,
+                    "status": "error",
+                    "error": str(e)
+                })
+            
+            results["processed"] += 1
+        
+        logger.info(f"Growth metrics calculation completed: {results['success']} success, {results['skipped']} skipped, {results['failed']} failed, {results['processed']} processed")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in sync_growth_metrics: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "processed": 0
+        }

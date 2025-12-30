@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Monitor - DCF Project</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            color: #1f2937;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s;
+            background: rgba(102, 126, 234, 0.1);
+            border: 2px solid transparent;
+        }
+
+        .nav-links a:hover {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-links a.active {
+            background: rgba(102, 126, 234, 0.25);
+            border-color: rgba(102, 126, 234, 0.5);
+            font-weight: 600;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .stat-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        /* Card */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Info Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .info-item label {
+            display: block;
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .info-item value {
+            display: block;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .status-badge.connected, .status-badge.completed {
+            background: rgba(34, 197, 94, 0.15);
+            color: #16a34a;
+        }
+
+        .status-badge.disconnected, .status-badge.failed {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+        .status-badge.running {
+            background: rgba(59, 130, 246, 0.15);
+            color: #2563eb;
+        }
+
+        .status-badge.pending {
+            background: rgba(234, 179, 8, 0.15);
+            color: #ca8a04;
+        }
+
+        /* Memory Bar */
+        .memory-bar-container {
+            margin-top: 10px;
+        }
+
+        .memory-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .memory-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Key List */
+        .key-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .key-item {
+            background: #f3f4f6;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            border: 1px solid #e5e7eb;
+            transition: all 0.2s;
+        }
+
+        .key-item:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .key-item .ttl {
+            color: #9ca3af;
+            font-size: 0.8em;
+            margin-left: 8px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        /* Auto-refresh toggle */
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toggle {
+            width: 48px;
+            height: 26px;
+            background: #e5e7eb;
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .toggle.active {
+            background: #22c55e;
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .toggle.active::after {
+            transform: translateX(22px);
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            color: #6b7280;
+        }
+
+        .loading-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: #6b7280;
+        }
+
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        /* Section title */
+        .section-title {
+            font-size: 1em;
+            font-weight: 600;
+            color: #374151;
+            margin: 20px 0 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* External link */
+        .external-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .nav-links {
+                justify-content: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            body {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>⚡ Redis Monitor</h1>
+            <nav class="nav-links">
+                <a href="/">📊 Dashboard</a>
+                <a href="/static/stock-info.html">📈 Stock Info</a>
+                <a href="/static/database.html">🗄️ Database</a>
+                <a href="/static/jobs.html">🔧 Jobs</a>
+                <a href="/static/monitoring.html">🔍 Monitoring</a>
+                <a href="/static/redis.html" class="active">⚡ Redis</a>
+            </nav>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🔌</div>
+                <div class="stat-value" id="statStatus">--</div>
+                <div class="stat-label">Connection Status</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💾</div>
+                <div class="stat-value" id="statMemory">--</div>
+                <div class="stat-label">Memory Used</div>
+                <div class="memory-bar-container">
+                    <div class="memory-bar">
+                        <div class="memory-fill" id="memoryBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔑</div>
+                <div class="stat-value" id="statKeys">--</div>
+                <div class="stat-label">Total Keys</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-value" id="statOps">--</div>
+                <div class="stat-label">Ops/Second</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-value" id="statClients">--</div>
+                <div class="stat-label">Connected Clients</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-value" id="statUptime">--</div>
+                <div class="stat-label">Uptime</div>
+            </div>
+        </div>
+
+        <!-- Server Info Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🖥️ Server Information</h3>
+                <div class="auto-refresh">
+                    <span style="color: #6b7280; font-size: 0.9em;">Auto-refresh (5s)</span>
+                    <div class="toggle active" id="autoRefreshToggle" onclick="toggleAutoRefresh()"></div>
+                </div>
+            </div>
+            <div class="info-grid" id="serverInfo">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading server info...
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Stats Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📊 Sync Statistics</h3>
+                <button class="btn btn-secondary" onclick="loadRedisStats()">
+                    🔄 Refresh
+                </button>
+            </div>
+            <div class="info-grid" id="syncStats">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading stats...
+                </div>
+            </div>
+        </div>
+
+        <!-- Running Executions -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🏃 Running Executions</h3>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Execution ID</th>
+                            <th>Job ID</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Started At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="executionsBody">
+                        <tr>
+                            <td colspan="5" class="loading">
+                                <div class="loading-spinner"></div>
+                                Loading executions...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cache Summary Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📦 Cached Data Summary</h3>
+                <button class="btn btn-secondary" onclick="loadCacheSummary()">
+                    🔄 Refresh
+                </button>
+            </div>
+            
+            <h4 class="section-title">🔬 Active Analyses</h4>
+            <div class="key-list" id="analysisList">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+
+            <h4 class="section-title">📈 Cached Stocks</h4>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Cached Data Types</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stocksBody">
+                        <tr>
+                            <td colspan="2" class="loading">
+                                <div class="loading-spinner"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="section-title">⚙️ Registered Sync Jobs</h4>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Enabled</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobsBody">
+                        <tr>
+                            <td colspan="4" class="loading">
+                                <div class="loading-spinner"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Redis Commander Link -->
+        <div class="card" style="text-align: center; padding: 30px;">
+            <h3 style="margin-bottom: 15px; color: #1f2937;">🔧 Advanced Management</h3>
+            <p style="color: #6b7280; margin-bottom: 20px;">
+                For advanced Redis management, use Redis Commander web interface
+            </p>
+            <a href="http://localhost:8085" target="_blank" class="btn btn-primary external-link">
+                Open Redis Commander ↗
+            </a>
+            <p style="color: #9ca3af; margin-top: 15px; font-size: 0.85em;">
+                Login: admin / dcf_redis_2024
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let autoRefresh = true;
+        let refreshInterval = null;
+
+        // Load Redis info
+        async function loadRedisInfo() {
+            try {
+                const response = await fetch(`${API_BASE}/redis/info`);
+                const data = await response.json();
+                
+                if (data.status === 'connected') {
+                    document.getElementById('statStatus').innerHTML = '<span class="status-badge connected">● Connected</span>';
+                    document.getElementById('statMemory').textContent = data.memory?.used_memory_human || '--';
+                    document.getElementById('statKeys').textContent = data.keys?.total_keys || 0;
+                    document.getElementById('statOps').textContent = data.stats?.ops_per_sec || 0;
+                    document.getElementById('statClients').textContent = data.connected_clients || 0;
+                    document.getElementById('statUptime').textContent = formatUptime(data.uptime_seconds);
+                    
+                    const memoryUsed = parseInt(data.memory?.used_memory || 0);
+                    const memoryPercent = Math.min((memoryUsed / (1024 * 1024 * 1024)) * 100, 100);
+                    document.getElementById('memoryBar').style.width = `${memoryPercent}%`;
+                    
+                    document.getElementById('serverInfo').innerHTML = `
+                        <div class="info-item">
+                            <label>Redis Version</label>
+                            <value>${data.version || '--'}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Memory Peak</label>
+                            <value>${data.memory?.used_memory_peak_human || '--'}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Fragmentation Ratio</label>
+                            <value>${data.memory?.memory_fragmentation_ratio?.toFixed(2) || '--'}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Total Connections</label>
+                            <value>${data.stats?.total_connections_received || 0}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Total Commands</label>
+                            <value>${formatNumber(data.stats?.total_commands_processed || 0)}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>AOF Enabled</label>
+                            <value>${data.persistence?.aof_enabled ? 'Yes' : 'No'}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Sync Jobs Count</label>
+                            <value>${data.keys?.sync_jobs || 0}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Running Executions</label>
+                            <value>${data.keys?.running_executions || 0}</value>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('statStatus').innerHTML = '<span class="status-badge disconnected">● Disconnected</span>';
+                    document.getElementById('serverInfo').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <p>Redis is not connected</p>
+                            <p style="font-size: 0.85em; margin-top: 5px;">${data.error || 'Unknown error'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading Redis info:', error);
+                document.getElementById('statStatus').innerHTML = '<span class="status-badge disconnected">● Error</span>';
+            }
+        }
+
+        // Load Redis stats
+        async function loadRedisStats() {
+            try {
+                const response = await fetch(`${API_BASE}/redis/stats`);
+                const data = await response.json();
+                
+                const stats = data.stats || {};
+                document.getElementById('syncStats').innerHTML = `
+                    <div class="info-item">
+                        <label>Jobs Created</label>
+                        <value>${stats.jobs_created || 0}</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Executions Started</label>
+                        <value>${stats.executions_started || 0}</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Executions Completed</label>
+                        <value>${stats.executions_completed || 0}</value>
+                    </div>
+                    <div class="info-item">
+                        <label>Executions Failed</label>
+                        <value>${stats.executions_failed || 0}</value>
+                    </div>
+                `;
+                
+                const executions = data.running_executions || [];
+                const executionsBody = document.getElementById('executionsBody');
+                
+                if (executions.length === 0) {
+                    executionsBody.innerHTML = `
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #6b7280; padding: 30px;">
+                                No running executions
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    executionsBody.innerHTML = executions.map(exec => `
+                        <tr>
+                            <td><code style="background: #f3f4f6; padding: 3px 8px; border-radius: 4px;">${exec.execution_id || '--'}</code></td>
+                            <td>${exec.job_id || '--'}</td>
+                            <td><span class="status-badge ${exec.status}">${exec.status || '--'}</span></td>
+                            <td>${exec.progress_percent || 0}%</td>
+                            <td>${formatDate(exec.started_at)}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading Redis stats:', error);
+            }
+        }
+
+        // Load cache summary
+        async function loadCacheSummary() {
+            try {
+                const response = await fetch(`${API_BASE}/redis/cache-summary`);
+                const data = await response.json();
+                
+                const analysisList = document.getElementById('analysisList');
+                const analyses = data.analysis_status || [];
+                
+                if (analyses.length === 0) {
+                    analysisList.innerHTML = '<div class="empty-state" style="padding: 15px;">No active analyses</div>';
+                } else {
+                    analysisList.innerHTML = analyses.map(a => `
+                        <div class="key-item">
+                            <span class="status-badge ${a.status}">${a.ticker}</span>
+                            ${a.progress ? `<span class="ttl">${a.progress}%</span>` : ''}
+                        </div>
+                    `).join('');
+                }
+                
+                const stocksBody = document.getElementById('stocksBody');
+                const stocks = data.cached_stocks || [];
+                
+                if (stocks.length === 0) {
+                    stocksBody.innerHTML = `
+                        <tr>
+                            <td colspan="2" style="text-align: center; color: #6b7280; padding: 20px;">
+                                No cached stocks
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    stocksBody.innerHTML = stocks.map(stock => `
+                        <tr>
+                            <td><strong style="color: #667eea;">${stock.ticker}</strong></td>
+                            <td>
+                                <div class="key-list">
+                                    ${(stock.caches || []).map(c => `
+                                        <span class="key-item" style="font-size: 0.8em; padding: 4px 8px;">
+                                            ${c.type}
+                                            <span class="ttl">${formatTTL(c.ttl)}</span>
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+                
+                const jobsBody = document.getElementById('jobsBody');
+                const jobs = data.sync_jobs || [];
+                
+                if (jobs.length === 0) {
+                    jobsBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: #6b7280; padding: 20px;">
+                                No sync jobs registered
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    jobsBody.innerHTML = jobs.map(job => `
+                        <tr>
+                            <td><code style="background: #f3f4f6; padding: 3px 8px; border-radius: 4px;">${job.job_id}</code></td>
+                            <td>${job.name || '--'}</td>
+                            <td><span class="status-badge running">${job.job_type}</span></td>
+                            <td>${job.enabled ? '✅ Yes' : '❌ No'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading cache summary:', error);
+            }
+        }
+
+        // Helper functions
+        function formatUptime(seconds) {
+            if (!seconds) return '--';
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '--';
+            const date = new Date(dateStr);
+            return date.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        function formatTTL(ttl) {
+            if (ttl < 0) return 'No TTL';
+            if (ttl < 60) return `${ttl}s`;
+            if (ttl < 3600) return `${Math.floor(ttl / 60)}m`;
+            if (ttl < 86400) return `${Math.floor(ttl / 3600)}h`;
+            return `${Math.floor(ttl / 86400)}d`;
+        }
+
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const toggle = document.getElementById('autoRefreshToggle');
+            toggle.classList.toggle('active', autoRefresh);
+            
+            if (autoRefresh) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        }
+
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                loadRedisInfo();
+                loadRedisStats();
+            }, 5000);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRedisInfo();
+            loadRedisStats();
+            loadCacheSummary();
+            startAutoRefresh();
+        });
+    </script>
+</body>
+</html>

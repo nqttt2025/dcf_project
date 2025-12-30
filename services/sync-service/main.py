@@ -52,10 +52,43 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 # Database connection is now direct via SQLAlchemy
 
-# Job storage (in-memory for now, will move to database)
+# Import Redis Jobs Store for persistent job storage
+from src.utils.redis_jobs_store import get_redis_jobs_store
+
+# Get Redis jobs store instance
+redis_jobs_store = get_redis_jobs_store()
+
+# Legacy in-memory stores (fallback only, prefer Redis)
 jobs_store = {}
 executions_store = {}
 logs_store = {}
+
+
+def get_jobs_store():
+    """Get jobs from Redis, fallback to memory"""
+    redis_jobs = redis_jobs_store.get_all_jobs()
+    if redis_jobs:
+        return redis_jobs
+    return jobs_store
+
+
+def save_job_to_store(job_id: str, job_data: dict):
+    """Save job to Redis and memory"""
+    redis_jobs_store.save_job(job_id, job_data)
+    jobs_store[job_id] = job_data
+
+
+def get_job_from_store(job_id: str):
+    """Get job from Redis, fallback to memory"""
+    job = redis_jobs_store.get_job(job_id)
+    if job:
+        return job
+    return jobs_store.get(job_id)
+
+
+def job_exists_in_store(job_id: str) -> bool:
+    """Check if job exists in Redis or memory"""
+    return redis_jobs_store.job_exists(job_id) or job_id in jobs_store
 
 # Pydantic models
 class JobConfig(BaseModel):
@@ -113,14 +146,39 @@ def health_check():
     """Health check endpoint"""
     return create_health_response("sync-service", include_database=True)
 
+
+@app.get("/api/redis/info")
+async def get_redis_info():
+    """Get Redis server info for monitoring"""
+    return redis_jobs_store.get_redis_info()
+
+
+@app.get("/api/redis/stats")
+async def get_redis_stats():
+    """Get Redis sync stats"""
+    return {
+        "stats": redis_jobs_store.get_stats(),
+        "running_executions": redis_jobs_store.get_running_executions(),
+    }
+
+
+@app.get("/api/redis/cache-summary")
+async def get_redis_cache_summary():
+    """Get summary of cached data in Redis"""
+    return redis_jobs_store.get_cached_data_summary()
+
 @app.get("/api/jobs")
 async def list_jobs():
     """List all sync jobs"""
     jobs = []
-    for job_id, job in jobs_store.items():
+    all_jobs = get_jobs_store()
+    
+    for job_id, job in all_jobs.items():
+        # Get last execution from Redis
+        executions = redis_jobs_store.get_job_executions(job_id, limit=1)
         last_execution = None
-        if job_id in executions_store and executions_store[job_id]:
-            last_exec = max(executions_store[job_id], key=lambda x: x.get('started_at', ''))
+        if executions:
+            last_exec = executions[0]
             last_execution = {
                 "execution_id": last_exec.get('execution_id'),
                 "status": last_exec.get('status'),
@@ -147,30 +205,33 @@ async def list_jobs():
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str):
     """Get job details"""
-    if job_id not in jobs_store:
+    job = get_job_from_store(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     
-    job = jobs_store[job_id]
-    executions = executions_store.get(job_id, [])
+    executions = redis_jobs_store.get_job_executions(job_id, limit=10)
     
     return {
         "job": job,
-        "executions": executions[-10:],  # Last 10 executions
+        "executions": executions,
         "total_executions": len(executions)
     }
 
 @app.post("/api/jobs")
 async def create_job(job: JobCreate):
     """Create a new sync job"""
-    if job.job_id in jobs_store:
+    if job_exists_in_store(job.job_id):
         raise HTTPException(status_code=400, detail=f"Job '{job.job_id}' already exists")
     
     job_dict = job.dict()
     job_dict['created_at'] = datetime.now(timezone.utc).isoformat()
     job_dict['updated_at'] = datetime.now(timezone.utc).isoformat()
     
-    jobs_store[job.job_id] = job_dict
-    executions_store[job.job_id] = []
+    # Save to Redis and memory
+    save_job_to_store(job.job_id, job_dict)
+    
+    # Track stats
+    redis_jobs_store.increment_stats('jobs_created')
     
     logger.info(f"Created job: {job.job_id} ({job.name})")
     
@@ -182,18 +243,18 @@ async def create_job(job: JobCreate):
 @app.post("/api/jobs/{job_id}/run")
 async def run_job(job_id: str, background_tasks: BackgroundTasks):
     """Run a job manually"""
-    if job_id not in jobs_store:
+    job = get_job_from_store(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     
-    job = jobs_store[job_id]
     if not job.get('enabled', True):
         raise HTTPException(status_code=400, detail=f"Job '{job_id}' is disabled")
     
-    # Check if job is already running
-    if job_id in executions_store:
-        running_executions = [e for e in executions_store[job_id] if e.get('status') == 'running']
-        if running_executions:
-            raise HTTPException(status_code=400, detail=f"Job '{job_id}' is already running")
+    # Check if job is already running (from Redis)
+    recent_executions = redis_jobs_store.get_job_executions(job_id, limit=5)
+    running_executions = [e for e in recent_executions if e.get('status') == 'running']
+    if running_executions:
+        raise HTTPException(status_code=400, detail=f"Job '{job_id}' is already running")
     
     # Create execution
     execution_id = f"{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -215,6 +276,11 @@ async def run_job(job_id: str, background_tasks: BackgroundTasks):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
+    # Save execution to Redis
+    redis_jobs_store.add_execution(job_id, execution)
+    redis_jobs_store.increment_stats('executions_started')
+    
+    # Also keep in memory for backward compatibility
     if job_id not in executions_store:
         executions_store[job_id] = []
     executions_store[job_id].append(execution)
@@ -233,7 +299,14 @@ async def run_job(job_id: str, background_tasks: BackgroundTasks):
 
 def update_progress(execution_id: str, step: str, percent: int, message: str = ""):
     """Update execution progress"""
-    # Find execution in all jobs
+    # Update in Redis
+    redis_jobs_store.update_execution(execution_id, {
+        'progress_percent': percent,
+        'current_step': step,
+        'step_message': message,
+    })
+    
+    # Also update in memory for backward compatibility
     for job_id, executions in executions_store.items():
         execution = next((e for e in executions if e['execution_id'] == execution_id), None)
         if execution:
@@ -248,8 +321,9 @@ def update_progress(execution_id: str, step: str, percent: int, message: str = "
                 'message': message,
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
-            add_log(execution_id, "INFO", f"[{percent}%] {step}: {message}")
             break
+    
+    add_log(execution_id, "INFO", f"[{percent}%] {step}: {message}")
 
 async def update_redis_cache_after_sync(job_type: str, ticker: Optional[str], sync_result: Dict):
     """Update Redis cache after syncing data to database"""
@@ -360,15 +434,20 @@ async def update_redis_cache_after_sync(job_type: str, ticker: Optional[str], sy
 async def execute_job(job_id: str, execution_id: str):
     """Execute a job with detailed progress tracking"""
     try:
-        # Update execution status
-        execution = next((e for e in executions_store[job_id] if e['execution_id'] == execution_id), None)
-        if not execution:
-            logger.error(f"Execution {execution_id} not found")
-            return
+        # Update execution status in Redis
+        started_at = datetime.now(timezone.utc).isoformat()
+        redis_jobs_store.update_execution(execution_id, {
+            'status': 'running',
+            'started_at': started_at,
+            'steps': []
+        })
         
-        execution['status'] = 'running'
-        execution['started_at'] = datetime.now(timezone.utc).isoformat()
-        execution['steps'] = []
+        # Also update in memory
+        execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
+        if execution:
+            execution['status'] = 'running'
+            execution['started_at'] = started_at
+            execution['steps'] = []
         
         # Add log
         add_log(execution_id, "INFO", f"Starting job execution: {job_id}")
@@ -422,35 +501,84 @@ async def execute_job(job_id: str, execution_id: str):
                 {"name": "Finalizing", "percent": 100}
             ]
             result = await sync_base_pe_with_progress(execution_id, ticker, steps)
+        elif job_type == 'growth_metrics':
+            steps = [
+                {"name": "Calculating growth metrics from financial data", "percent": 50},
+                {"name": "Updating database (growth_metrics table)", "percent": 80},
+                {"name": "Finalizing", "percent": 100}
+            ]
+            result = await sync_growth_metrics_with_progress(execution_id, ticker, steps)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
         
-        execution['steps'] = steps
+        if execution:
+            execution['steps'] = steps
         
-        # Update execution
-        execution['status'] = 'completed'
-        execution['completed_at'] = datetime.now(timezone.utc).isoformat()
-        execution['result'] = result
-        execution['progress_percent'] = 100
-        execution['current_step'] = "Completed"
-        execution['step_message'] = "Job execution completed successfully"
+        # Update execution to completed
+        completed_at = datetime.now(timezone.utc).isoformat()
         
-        started = datetime.fromisoformat(execution['started_at'].replace('Z', '+00:00'))
-        completed = datetime.fromisoformat(execution['completed_at'].replace('Z', '+00:00'))
-        execution['duration'] = int((completed - started).total_seconds())
+        # Calculate duration
+        exec_data = redis_jobs_store.get_execution(execution_id)
+        started_at_str = exec_data.get('started_at') if exec_data else (execution.get('started_at') if execution else None)
+        duration = 0
+        if started_at_str:
+            try:
+                started = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                completed = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                duration = int((completed - started).total_seconds())
+            except:
+                pass
+        
+        # Update Redis
+        redis_jobs_store.update_execution(execution_id, {
+            'status': 'completed',
+            'completed_at': completed_at,
+            'result': result,
+            'progress_percent': 100,
+            'current_step': 'Completed',
+            'step_message': 'Job execution completed successfully',
+            'duration': duration,
+            'steps': steps
+        })
+        redis_jobs_store.increment_stats('executions_completed')
+        
+        # Also update in memory
+        if execution:
+            execution['status'] = 'completed'
+            execution['completed_at'] = completed_at
+            execution['result'] = result
+            execution['progress_percent'] = 100
+            execution['current_step'] = "Completed"
+            execution['step_message'] = "Job execution completed successfully"
+            execution['duration'] = duration
         
         add_log(execution_id, "INFO", f"Job execution completed successfully")
         
     except Exception as e:
         logger.error(f"Error executing job {job_id}: {e}", exc_info=True)
-        execution = next((e for e in executions_store[job_id] if e['execution_id'] == execution_id), None)
+        
+        completed_at = datetime.now(timezone.utc).isoformat()
+        
+        # Update Redis
+        redis_jobs_store.update_execution(execution_id, {
+            'status': 'failed',
+            'completed_at': completed_at,
+            'error_message': str(e),
+            'current_step': 'Failed',
+            'step_message': str(e)
+        })
+        redis_jobs_store.increment_stats('executions_failed')
+        
+        # Also update in memory
+        execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
         if execution:
             execution['status'] = 'failed'
-            execution['completed_at'] = datetime.now(timezone.utc).isoformat()
+            execution['completed_at'] = completed_at
             execution['error_message'] = str(e)
             execution['current_step'] = "Failed"
             execution['step_message'] = str(e)
-            add_log(execution_id, "ERROR", f"Job execution failed: {str(e)}")
+        
+        add_log(execution_id, "ERROR", f"Job execution failed: {str(e)}")
 
 async def sync_current_price_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
     """Sync current price with progress tracking - Direct database access"""
@@ -615,8 +743,40 @@ async def sync_base_pe(ticker: Optional[str] = None):
     """Sync base PE (legacy)"""
     return await sync_base_pe_with_progress("", ticker, [])
 
+
+async def sync_growth_metrics_with_progress(execution_id: str, ticker: Optional[str] = None, steps: List[Dict] = None):
+    """Sync growth metrics with progress tracking - Calculated from financial_data"""
+    
+    if steps and len(steps) > 0:
+        update_progress(execution_id, steps[0]["name"], steps[0]["percent"], "Calculating growth metrics from financial data...")
+    
+    # Run sync in thread pool to not block async loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _sync_growth_metrics_blocking, ticker)
+    
+    if steps and len(steps) > 1:
+        update_progress(execution_id, steps[1]["name"], steps[1]["percent"], "Database updated successfully")
+    
+    if steps and len(steps) > 2:
+        update_progress(execution_id, steps[2]["name"], steps[2]["percent"], "Sync completed")
+    
+    return result
+
+def _sync_growth_metrics_blocking(ticker: Optional[str] = None) -> Dict:
+    """Blocking sync growth metrics - runs in thread pool"""
+    with get_db_session() as db:
+        return data_fetcher.sync_growth_metrics(db, ticker)
+
+async def sync_growth_metrics(ticker: Optional[str] = None):
+    """Sync growth metrics (legacy)"""
+    return await sync_growth_metrics_with_progress("", ticker, [])
+
 def add_log(execution_id: str, level: str, message: str):
-    """Add log entry"""
+    """Add log entry to Redis and memory"""
+    # Add to Redis
+    redis_jobs_store.add_log(execution_id, level, message)
+    
+    # Also keep in memory for backward compatibility
     if execution_id not in logs_store:
         logs_store[execution_id] = []
     
@@ -629,14 +789,21 @@ def add_log(execution_id: str, level: str, message: str):
 @app.get("/api/jobs/{job_id}/executions/{execution_id}")
 async def get_execution(job_id: str, execution_id: str):
     """Get execution details"""
-    if job_id not in executions_store:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    # Try Redis first
+    execution = redis_jobs_store.get_execution(execution_id)
     
-    execution = next((e for e in executions_store[job_id] if e['execution_id'] == execution_id), None)
+    # Fallback to memory
+    if not execution:
+        if job_id in executions_store:
+            execution = next((e for e in executions_store[job_id] if e['execution_id'] == execution_id), None)
+    
     if not execution:
         raise HTTPException(status_code=404, detail=f"Execution '{execution_id}' not found")
     
-    logs = logs_store.get(execution_id, [])
+    # Get logs from Redis
+    logs = redis_jobs_store.get_logs(execution_id)
+    if not logs:
+        logs = logs_store.get(execution_id, [])
     
     return {
         "execution": execution,
@@ -647,25 +814,37 @@ async def get_execution(job_id: str, execution_id: str):
 async def get_execution_logs(job_id: str, execution_id: str):
     """Get execution logs as SSE stream"""
     async def log_generator():
-        logs = logs_store.get(execution_id, [])
+        # Get logs from Redis first, then memory
+        logs = redis_jobs_store.get_logs(execution_id)
+        if not logs:
+            logs = logs_store.get(execution_id, [])
+        
         for log in logs:
             yield f"data: {json.dumps(log)}\n\n"
         
         # Keep connection alive and send new logs
-        execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
+        execution = redis_jobs_store.get_execution(execution_id)
+        if not execution:
+            execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
+        
         if execution and execution.get('status') == 'running':
             # Poll for new logs
             last_count = len(logs)
             while True:
                 await asyncio.sleep(1)
-                current_logs = logs_store.get(execution_id, [])
+                current_logs = redis_jobs_store.get_logs(execution_id)
+                if not current_logs:
+                    current_logs = logs_store.get(execution_id, [])
+                
                 if len(current_logs) > last_count:
                     for log in current_logs[last_count:]:
                         yield f"data: {json.dumps(log)}\n\n"
                     last_count = len(current_logs)
                 
                 # Check if execution completed
-                execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
+                execution = redis_jobs_store.get_execution(execution_id)
+                if not execution:
+                    execution = next((e for e in executions_store.get(job_id, []) if e['execution_id'] == execution_id), None)
                 if not execution or execution.get('status') != 'running':
                     break
     
@@ -772,6 +951,17 @@ async def api_sync_base_pe(ticker: Optional[str] = Query(None, description="Sync
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/sync/growth-metrics")
+async def api_sync_growth_metrics(ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided")):
+    """Calculate and sync growth metrics from financial data - Direct API endpoint"""
+    try:
+        result = await sync_growth_metrics(ticker)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing growth metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/sync/{table_name}")
 async def api_sync_table(
     table_name: str,
@@ -785,6 +975,7 @@ async def api_sync_table(
         'shares_outstanding': sync_shares_outstanding,
         'current_price': sync_current_price,
         'base_pe': sync_base_pe,
+        'growth_metrics': sync_growth_metrics,
     }
     
     if table_name not in table_mapping:

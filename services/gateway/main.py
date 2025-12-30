@@ -529,6 +529,14 @@ async def sync_base_pe(ticker: Optional[str] = Query(None)):
         url += f"?ticker={ticker}"
     return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
 
+@app.post("/api/sync/growth-metrics")
+async def sync_growth_metrics(ticker: Optional[str] = Query(None)):
+    """Calculate and sync growth metrics from financial data via sync-service"""
+    url = "/api/sync/growth-metrics"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(SYNC_SERVICE_URL, "POST", url, timeout=300.0)
+
 @app.post("/api/sync/{table_name}")
 async def sync_table(
     table_name: str,
@@ -551,6 +559,7 @@ async def sync_table(
 async def list_sync_jobs():
     """List all sync jobs"""
     return await make_service_request(SYNC_SERVICE_URL, "GET", "/api/jobs", timeout=10.0)
+
 
 @app.get("/api/sync/jobs/{job_id}")
 async def get_sync_job(job_id: str):
@@ -579,6 +588,27 @@ async def stop_sync_job(job_id: str, execution_id: Optional[str] = Query(None)):
 async def get_sync_execution(job_id: str, execution_id: str):
     """Get sync execution details"""
     return await make_service_request(SYNC_SERVICE_URL, "GET", f"/api/jobs/{job_id}/executions/{execution_id}", timeout=10.0)
+
+
+# ==================== Redis Monitoring Routes ====================
+
+@app.get("/api/redis/info")
+async def get_redis_info():
+    """Get Redis server info for monitoring"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", "/api/redis/info", timeout=10.0)
+
+
+@app.get("/api/redis/stats")
+async def get_redis_stats():
+    """Get Redis sync stats"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", "/api/redis/stats", timeout=10.0)
+
+
+@app.get("/api/redis/cache-summary")
+async def get_redis_cache_summary():
+    """Get summary of cached data in Redis"""
+    return await make_service_request(SYNC_SERVICE_URL, "GET", "/api/redis/cache-summary", timeout=10.0)
+
 
 # ==================== Logs Routes ====================
 
