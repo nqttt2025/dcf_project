@@ -16,6 +16,15 @@ from sqlalchemy import text
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 import time
+import logging
+
+# Setup logger
+try:
+    from src.utils.service_logger import setup_service_logger
+    logger = setup_service_logger('database', level=logging.INFO)
+except Exception:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
 
 # Try to import pandas
 try:
@@ -267,8 +276,11 @@ def sync_financial_data(db: Session, ticker: Optional[str] = None) -> Dict:
 
 
 def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) -> Dict:
-    """Sync market_data from vnstock"""
+    """Sync market_data from vnstock with detailed logging"""
+    logger.info(f"Starting market_data sync: ticker={ticker}, days={days}")
+    
     if not HAS_VNSTOCK:
+        logger.error("vnstock library not available")
         return {
             "success": False,
             "error": "vnstock library not available",
@@ -278,11 +290,15 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
     try:
         # Get stocks to sync
         if ticker:
+            logger.info(f"Fetching market data for specific ticker: {ticker}")
             stocks_query = text("SELECT id, ticker FROM stocks WHERE ticker = :ticker AND is_active = TRUE")
             stocks = db.execute(stocks_query, {"ticker": ticker.upper()}).fetchall()
         else:
+            logger.info("Fetching market data for all active stocks")
             stocks_query = text("SELECT id, ticker FROM stocks WHERE is_active = TRUE")
             stocks = db.execute(stocks_query).fetchall()
+        
+        logger.info(f"Found {len(stocks)} active stock(s) to sync")
         
         results = {
             "processed": 0,
@@ -292,6 +308,7 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
         }
         
         if not stocks:
+            logger.warning("No active stocks found in database")
             return {
                 "success": False,
                 "error": "No active stocks found in database",
@@ -301,11 +318,13 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
         for idx, stock in enumerate(stocks):
             # Add delay between requests to avoid rate limit
             if idx > 0:
+                logger.debug(f"Waiting 2 seconds before next request (rate limit protection)")
                 time.sleep(2)
             
             try:
                 stock_id = stock.id
                 stock_ticker = stock.ticker
+                logger.info(f"[{idx+1}/{len(stocks)}] Processing {stock_ticker} (ID: {stock_id})")
                 
                 # Fetch historical price data
                 from io import StringIO
@@ -318,17 +337,24 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                 price_df = None
                 
                 try:
-                    vnstock = Vnstock()
-                    stock_obj = vnstock.stock(symbol=stock_ticker.upper(), source="VCI")
-                    # Get historical price data
                     end_date = datetime.now().date()
                     start_date = end_date - timedelta(days=days)
+                    logger.info(f"Fetching historical data for {stock_ticker} from {start_date} to {end_date}")
+                    
+                    vnstock = Vnstock()
+                    stock_obj = vnstock.stock(symbol=stock_ticker.upper(), source="VCI")
                     try:
                         price_df = stock_obj.historical_data(start_date=start_date.strftime('%Y-%m-%d'), 
                                                              end_date=end_date.strftime('%Y-%m-%d'))
+                        if HAS_PANDAS:
+                            logger.info(f"Received {len(price_df)} rows of market data for {stock_ticker}")
+                        else:
+                            logger.info(f"Received market data for {stock_ticker} (pandas not available for row count)")
                     except (SystemExit, Exception) as e:
                         error_msg = str(e)
+                        logger.error(f"Error fetching historical data for {stock_ticker}: {error_msg}")
                         if "Rate limit" in error_msg or "quota" in error_msg.lower():
+                            logger.error(f"Rate limit exceeded for {stock_ticker}")
                             raise SystemExit(f"Rate limit exceeded: {error_msg}")
                         price_df = pd.DataFrame() if HAS_PANDAS else None
                 except SystemExit as e:
@@ -338,9 +364,12 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                     sys_module.stderr = old_stderr
                 
                 inserted_count = 0
+                updated_count = 0
                 
                 if price_df is not None and (not HAS_PANDAS or (not price_df.empty and len(price_df) > 0)):
-                    for idx, row in price_df.iterrows():
+                    logger.info(f"Processing {len(price_df) if HAS_PANDAS else 'unknown'} rows for {stock_ticker}")
+                    
+                    for row_idx, row in price_df.iterrows():
                         try:
                             def safe_get_date(row, key, default_idx):
                                 if HAS_PANDAS:
@@ -354,8 +383,9 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                                             return datetime.now().date()
                                     return None
                             
-                            trade_date = safe_get_date(row, 'time', idx)
+                            trade_date = safe_get_date(row, 'time', row_idx)
                             if not trade_date:
+                                logger.debug(f"Skipping row {row_idx} for {stock_ticker}: invalid trade_date")
                                 continue
                             
                             def safe_get_float(row, key):
@@ -381,6 +411,10 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                             low_price = safe_get_float(row, 'low')
                             close_price = safe_get_float(row, 'close')
                             volume = safe_get_int(row, 'volume')
+                            
+                            # Check if record already exists
+                            check_query = text("SELECT COUNT(*) FROM market_data WHERE stock_id = :stock_id AND trade_date = :trade_date")
+                            exists = db.execute(check_query, {"stock_id": stock_id, "trade_date": trade_date}).scalar() > 0
                             
                             # Insert or update
                             insert_query = text("""
@@ -413,23 +447,33 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                                 "close_price": close_price,
                                 "volume": volume
                             })
-                            inserted_count += 1
+                            
+                            if exists:
+                                updated_count += 1
+                            else:
+                                inserted_count += 1
+                                
                         except Exception as e:
+                            logger.warning(f"Error processing row {row_idx} for {stock_ticker} on {trade_date}: {e}")
                             continue
                 
                 db.commit()
+                logger.info(f"Successfully synced {stock_ticker}: {inserted_count} inserted, {updated_count} updated, total {inserted_count + updated_count} records")
                 
                 results["success"] += 1
                 results["details"].append({
                     "ticker": stock_ticker,
                     "status": "success",
-                    "records_inserted": inserted_count
+                    "records_inserted": inserted_count,
+                    "records_updated": updated_count,
+                    "total_records": inserted_count + updated_count
                 })
                 
             except SystemExit as e:
                 # Handle vnstock rate limit - stop processing
                 db.rollback()
                 error_msg = str(e)
+                logger.error(f"Rate limit exceeded while processing {stock_ticker}: {error_msg}")
                 results["failed"] += 1
                 results["error"] = f"Rate limit exceeded while processing {stock_ticker}. Please wait and try again later."
                 results["details"].append({
@@ -440,6 +484,7 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
                 break
             except Exception as e:
                 db.rollback()
+                logger.error(f"Error processing {stock_ticker}: {e}", exc_info=True)
                 results["failed"] += 1
                 results["details"].append({
                     "ticker": stock_ticker,
@@ -449,9 +494,11 @@ def sync_market_data(db: Session, ticker: Optional[str] = None, days: int = 30) 
             
             results["processed"] += 1
         
+        logger.info(f"Market data sync completed: {results['success']} success, {results['failed']} failed, {results['processed']} processed")
         return results
         
     except Exception as e:
+        logger.error(f"Error in sync_market_data: {e}", exc_info=True)
         return {
             "success": False,
             "error": str(e),
@@ -662,3 +709,346 @@ def sync_shares_outstanding(db: Session, ticker: Optional[str] = None) -> Dict:
             "processed": 0
         }
 
+
+def sync_current_price(db: Session, ticker: Optional[str] = None) -> Dict:
+    """Sync current stock price from vnstock to database and Redis"""
+    logger.info(f"Starting current price sync: ticker={ticker or 'all'}")
+    
+    if not HAS_VNSTOCK:
+        logger.error("vnstock library not available")
+        return {
+            "success": False,
+            "error": "vnstock library not available",
+            "processed": 0
+        }
+    
+    try:
+        # Get stocks to sync
+        if ticker:
+            logger.info(f"Fetching current price for specific ticker: {ticker}")
+            stocks_query = text("SELECT id, ticker FROM stocks WHERE ticker = :ticker AND is_active = TRUE")
+            stocks = db.execute(stocks_query, {"ticker": ticker.upper()}).fetchall()
+        else:
+            logger.info("Fetching current price for all active stocks")
+            stocks_query = text("SELECT id, ticker FROM stocks WHERE is_active = TRUE")
+            stocks = db.execute(stocks_query).fetchall()
+        
+        logger.info(f"Found {len(stocks)} active stock(s) to sync")
+        
+        results = {
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        if not stocks:
+            logger.warning("No active stocks found in database")
+            return {
+                "success": False,
+                "error": "No active stocks found in database",
+                "processed": 0
+            }
+        
+        for idx, stock in enumerate(stocks):
+            # Add delay between requests to avoid rate limit
+            if idx > 0:
+                time.sleep(1)  # 1 second delay between stocks
+            
+            try:
+                stock_id = stock.id
+                stock_ticker = stock.ticker
+                logger.info(f"[{idx+1}/{len(stocks)}] Fetching current price for {stock_ticker}")
+                
+                # Fetch current price from vnstock
+                from io import StringIO
+                import sys as sys_module
+                old_stdout = sys_module.stdout
+                old_stderr = sys_module.stderr
+                sys_module.stdout = StringIO()
+                sys_module.stderr = StringIO()
+                
+                current_price = None
+                market_cap = None
+                pe_ratio = None
+                
+                try:
+                    vnstock = Vnstock()
+                    stock_obj = vnstock.stock(symbol=stock_ticker.upper(), source="VCI")
+                    
+                    # Get price board data
+                    try:
+                        price_board_df = stock_obj.trading.price_board([stock_obj.symbol])
+                        if price_board_df is not None and not price_board_df.empty:
+                            current_price = float(price_board_df.iloc[0][('match', 'match_price')])
+                            logger.info(f"Got current price for {stock_ticker}: {current_price:,.0f}")
+                    except Exception as e:
+                        logger.warning(f"Could not get price board for {stock_ticker}: {e}")
+                    
+                    # Get market cap and PE if available
+                    try:
+                        overview_df = stock_obj.company.overview()
+                        if overview_df is not None and not overview_df.empty:
+                            # Try to get market cap and PE from overview
+                            for col in overview_df.columns:
+                                if 'market' in col.lower() and 'cap' in col.lower():
+                                    market_cap = overview_df.iloc[0][col]
+                                if 'pe' in col.lower() or 'p/e' in col.lower():
+                                    pe_ratio = overview_df.iloc[0][col]
+                    except Exception as e:
+                        logger.debug(f"Could not get overview for {stock_ticker}: {e}")
+                        
+                except SystemExit as e:
+                    error_msg = str(e)
+                    if "Rate limit" in error_msg or "quota" in error_msg.lower():
+                        logger.error(f"Rate limit exceeded for {stock_ticker}")
+                        raise SystemExit(f"Rate limit exceeded: {error_msg}")
+                    raise
+                finally:
+                    sys_module.stdout = old_stdout
+                    sys_module.stderr = old_stderr
+                
+                if current_price and current_price > 0:
+                    # Update market_data table with latest price (today's date)
+                    today = datetime.now().date()
+                    
+                    # Check if record exists for today
+                    check_query = text("""
+                        SELECT id FROM market_data 
+                        WHERE stock_id = :stock_id AND trade_date = :trade_date
+                    """)
+                    existing = db.execute(check_query, {"stock_id": stock_id, "trade_date": today}).fetchone()
+                    
+                    if existing:
+                        # Update existing record
+                        update_query = text("""
+                            UPDATE market_data 
+                            SET close_price = :close_price,
+                                adjusted_close = :close_price,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE stock_id = :stock_id AND trade_date = :trade_date
+                        """)
+                        db.execute(update_query, {
+                            "stock_id": stock_id,
+                            "trade_date": today,
+                            "close_price": current_price
+                        })
+                        logger.info(f"Updated price for {stock_ticker} on {today}: {current_price:,.0f}")
+                    else:
+                        # Insert new record
+                        insert_query = text("""
+                            INSERT INTO market_data (
+                                stock_id, trade_date,
+                                open_price, high_price, low_price, close_price, adjusted_close,
+                                volume, data_source, created_at, updated_at
+                            ) VALUES (
+                                :stock_id, :trade_date,
+                                :close_price, :close_price, :close_price, :close_price, :close_price,
+                                0, 'vnstock_price_sync', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            )
+                        """)
+                        db.execute(insert_query, {
+                            "stock_id": stock_id,
+                            "trade_date": today,
+                            "close_price": current_price
+                        })
+                        logger.info(f"Inserted price for {stock_ticker} on {today}: {current_price:,.0f}")
+                    
+                    # Update Redis cache
+                    try:
+                        from src.utils.redis_client import get_redis_client
+                        redis_client = get_redis_client()
+                        if redis_client and redis_client._client:
+                            redis_client.cache_market_data(stock_ticker, {
+                                'current_price': current_price,
+                                'market_cap': market_cap,
+                                'pe_ratio': pe_ratio,
+                                'source': 'vnstock_price_sync',
+                                'updated_at': datetime.now().isoformat()
+                            })
+                            logger.info(f"Cached price to Redis for {stock_ticker}")
+                    except Exception as e:
+                        logger.debug(f"Could not cache to Redis for {stock_ticker}: {e}")
+                    
+                    db.commit()
+                    
+                    results["success"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "success",
+                        "price": current_price,
+                        "updated": True
+                    })
+                else:
+                    logger.warning(f"No valid price retrieved for {stock_ticker}")
+                    results["failed"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "error",
+                        "error": "No valid price retrieved"
+                    })
+                
+            except SystemExit as e:
+                # Handle vnstock rate limit - stop processing
+                db.rollback()
+                error_msg = str(e)
+                logger.error(f"Rate limit exceeded while processing {stock_ticker}: {error_msg}")
+                results["failed"] += 1
+                results["error"] = f"Rate limit exceeded while processing {stock_ticker}. Please wait and try again later."
+                results["details"].append({
+                    "ticker": stock_ticker,
+                    "status": "error",
+                    "error": error_msg
+                })
+                break
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error processing {stock_ticker}: {e}", exc_info=True)
+                results["failed"] += 1
+                results["details"].append({
+                    "ticker": stock_ticker,
+                    "status": "error",
+                    "error": str(e)
+                })
+            
+            results["processed"] += 1
+        
+        logger.info(f"Current price sync completed: {results['success']} success, {results['failed']} failed, {results['processed']} processed")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in sync_current_price: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "processed": 0
+        }
+
+
+def sync_base_pe(db: Session, ticker: Optional[str] = None) -> Dict:
+    """Calculate and update base PE for stocks based on industry and current PE"""
+    logger.info(f"Starting base PE update: ticker={ticker or 'all'}")
+    
+    try:
+        # Import PE calculation functions
+        from src.core.industry_pe import get_current_pe, suggest_base_pe
+        import configparser
+        import os
+        from pathlib import Path
+        
+        # Get stocks to process
+        if ticker:
+            stocks_query = text("SELECT id, ticker, industry FROM stocks WHERE ticker = :ticker AND is_active = TRUE")
+            stocks = db.execute(stocks_query, {"ticker": ticker.upper()}).fetchall()
+        else:
+            stocks_query = text("SELECT id, ticker, industry FROM stocks WHERE is_active = TRUE")
+            stocks = db.execute(stocks_query).fetchall()
+        
+        logger.info(f"Found {len(stocks)} active stock(s) to update base PE")
+        
+        results = {
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        if not stocks:
+            logger.warning("No active stocks found in database")
+            return {
+                "success": False,
+                "error": "No active stocks found in database",
+                "processed": 0
+            }
+        
+        # Get config directory
+        if Path('/app').exists():
+            config_dir = Path('/app/config')
+        else:
+            config_dir = Path(__file__).parent.parent.parent / 'config'
+        
+        for idx, stock in enumerate(stocks):
+            # Add delay between requests
+            if idx > 0:
+                time.sleep(1)
+            
+            try:
+                stock_id = stock.id
+                stock_ticker = stock.ticker
+                industry = stock.industry
+                logger.info(f"[{idx+1}/{len(stocks)}] Updating base PE for {stock_ticker}")
+                
+                # Calculate current PE
+                try:
+                    current_pe = get_current_pe(stock_ticker)
+                    logger.info(f"Current PE for {stock_ticker}: {current_pe:.2f}" if current_pe else f"Could not calculate PE for {stock_ticker}")
+                except Exception as e:
+                    logger.warning(f"Could not calculate current PE for {stock_ticker}: {e}")
+                    current_pe = None
+                
+                # Suggest base PE
+                try:
+                    suggested_base_pe = suggest_base_pe(stock_ticker, industry, current_pe)
+                    logger.info(f"Suggested base PE for {stock_ticker}: {suggested_base_pe:.2f}")
+                except Exception as e:
+                    logger.warning(f"Could not suggest base PE for {stock_ticker}: {e}")
+                    suggested_base_pe = 8.5  # Default
+                
+                # Update config file
+                config_file = config_dir / f"{stock_ticker.lower()}.cfg"
+                if config_file.exists():
+                    config = configparser.ConfigParser()
+                    config.read(config_file)
+                    
+                    # Ensure [graham] section exists
+                    if 'graham' not in config:
+                        config.add_section('graham')
+                    
+                    # Update base_pe
+                    old_base_pe = config.getfloat('graham', 'base_pe', fallback=8.5)
+                    config.set('graham', 'base_pe', str(suggested_base_pe))
+                    
+                    # Write back to file
+                    with open(config_file, 'w') as f:
+                        config.write(f)
+                    
+                    logger.info(f"Updated base PE for {stock_ticker}: {old_base_pe:.2f} -> {suggested_base_pe:.2f}")
+                    
+                    results["success"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "success",
+                        "old_base_pe": old_base_pe,
+                        "new_base_pe": suggested_base_pe,
+                        "current_pe": current_pe
+                    })
+                else:
+                    logger.warning(f"Config file not found for {stock_ticker}: {config_file}")
+                    results["failed"] += 1
+                    results["details"].append({
+                        "ticker": stock_ticker,
+                        "status": "error",
+                        "error": "Config file not found"
+                    })
+                
+            except Exception as e:
+                logger.error(f"Error processing {stock_ticker}: {e}", exc_info=True)
+                results["failed"] += 1
+                results["details"].append({
+                    "ticker": stock_ticker,
+                    "status": "error",
+                    "error": str(e)
+                })
+            
+            results["processed"] += 1
+        
+        logger.info(f"Base PE update completed: {results['success']} success, {results['failed']} failed, {results['processed']} processed")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in sync_base_pe: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "processed": 0
+        }

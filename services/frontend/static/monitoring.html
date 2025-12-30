@@ -397,11 +397,28 @@
             width: 100%;
             min-height: 700px;
             height: 700px;
-            border: 2px solid #e5e7eb;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+            border: 2px solid #E5E7EB;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 50%, #E5E7EB 100%);
+            box-shadow: 
+                inset 0 2px 8px rgba(0, 0, 0, 0.05),
+                0 4px 16px rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            position: relative;
+        }
+
+        #networkDiagram::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 15% 25%, rgba(139, 92, 246, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 85% 75%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
         }
 
         #serviceDetailsPanel {
@@ -1876,24 +1893,64 @@
             const legendEl = document.getElementById('legend');
             
             const serviceGroups = {
-                'frontend': { color: '#10b981', shape: 'box', icon: '🌐', label: 'Frontend (Nginx)' },
-                'api': { color: '#3b82f6', shape: 'ellipse', icon: '🚪', label: 'API Gateway (HTTPS)' },
-                'service': { color: '#6366f1', shape: 'ellipse', icon: '⚙️', label: 'Microservices' },
-                'database': { color: '#8b5cf6', shape: 'database', icon: '🗄️', label: 'PostgreSQL' },
-                'cache': { color: '#f59e0b', shape: 'diamond', icon: '⚡', label: 'Redis Cache' }
+                'frontend': { 
+                    color: '#8B5CF6',  // Purple like AWS services
+                    gradient: ['#8B5CF6', '#7C3AED'],
+                    glow: 'rgba(139, 92, 246, 0.5)',
+                    shape: 'box', 
+                    icon: '🌐', 
+                    label: 'Frontend (Nginx)',
+                    borderColor: '#6D28D9'
+                },
+                'api': { 
+                    color: '#8B5CF6',  // Purple like AWS services
+                    gradient: ['#8B5CF6', '#7C3AED'],
+                    glow: 'rgba(139, 92, 246, 0.5)',
+                    shape: 'ellipse', 
+                    icon: '🚪', 
+                    label: 'API Gateway (HTTPS)',
+                    borderColor: '#6D28D9'
+                },
+                'service': { 
+                    color: '#F97316',  // Orange like AWS compute (ECS, EC2)
+                    gradient: ['#F97316', '#EA580C'],
+                    glow: 'rgba(249, 115, 22, 0.5)',
+                    shape: 'ellipse', 
+                    icon: '⚙️', 
+                    label: 'Microservices',
+                    borderColor: '#C2410C'
+                },
+                'database': { 
+                    color: '#10B981',  // Green like AWS RDS
+                    gradient: ['#10B981', '#059669'],
+                    glow: 'rgba(16, 185, 129, 0.5)',
+                    shape: 'database', 
+                    icon: '🗄️', 
+                    label: 'PostgreSQL',
+                    borderColor: '#047857'
+                },
+                'cache': { 
+                    color: '#10B981',  // Green like AWS ElastiCache
+                    gradient: ['#10B981', '#059669'],
+                    glow: 'rgba(16, 185, 129, 0.5)',
+                    shape: 'diamond', 
+                    icon: '⚡', 
+                    label: 'Redis Cache',
+                    borderColor: '#047857'
+                }
             };
 
             const activeCount = activeConnections.size;
             legendEl.innerHTML = `
                 ${Object.values(serviceGroups).map(group => `
-                <div class="legend-item">
-                    <div class="legend-color" style="background: ${group.color};"></div>
-                    <span>${group.icon} ${group.label}</span>
+                <div class="legend-item" style="background: rgba(255, 255, 255, 0.9); border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">
+                    <div class="legend-color" style="background: ${group.color}; border: 2px solid ${group.borderColor || group.color};"></div>
+                    <span style="color: #374151; font-weight: 500;">${group.icon} ${group.label}</span>
                 </div>
                 `).join('')}
-                <div class="legend-item" style="border-left: 3px solid #ef4444; padding-left: 8px;">
-                    <div class="legend-color" style="background: #ef4444; width: 20px; height: 3px;"></div>
-                    <span>⚡ Active Request (${activeCount})</span>
+                <div class="legend-item" style="background: rgba(254, 226, 226, 0.9); border: 1px solid #FCA5A5; border-radius: 8px; padding: 8px 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">
+                    <div class="legend-color" style="background: #EF4444; width: 20px; height: 3px; border: none;"></div>
+                    <span style="color: #991B1B; font-weight: 600;">⚡ Active Request (${activeCount})</span>
                 </div>
             `;
 
@@ -1930,55 +1987,64 @@
                     title: title,
                     color: {
                         background: style.color,
-                        border: darkenColor(style.color, 25),
+                        border: style.borderColor || style.gradient ? style.gradient[1] : darkenColor(style.color, 25),
                         highlight: {
-                            background: lightenColor(style.color, 15),
-                            border: darkenColor(style.color, 35)
+                            background: lightenColor(style.color, 10),
+                            border: style.borderColor || (style.gradient ? style.gradient[0] : lightenColor(style.color, 5))
                         },
                         hover: {
-                            background: lightenColor(style.color, 10),
-                            border: darkenColor(style.color, 30)
+                            background: lightenColor(style.color, 8),
+                            border: style.borderColor || (style.gradient ? style.gradient[0] : lightenColor(style.color, 3))
                         }
                     },
                     shape: style.shape,
                     font: {
                         size: 16,
-                        face: 'Segoe UI, Arial',
-                        color: '#ffffff',
+                        face: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Arial, sans-serif',
+                        color: '#FFFFFF',
                         bold: true,
-                        multi: false
+                        multi: false,
+                        strokeWidth: 2,
+                        strokeColor: 'rgba(0, 0, 0, 0.4)'
                     },
                     size: getServiceSize(service.type, service.name),
                     borderWidth: 3,
+                    borderWidthSelected: 5,
                     level: level,
                     shadow: {
                         enabled: true,
-                        color: 'rgba(0,0,0,0.4)',
-                        size: 12,
-                        x: 5,
-                        y: 5
+                        color: 'rgba(0, 0, 0, 0.25)',
+                        size: 8,
+                        x: 2,
+                        y: 2
                     },
                     chosen: {
                         node: function(values, id, selected, hovering) {
                             values.size = values.size + 8;
-                            values.shadow.size = 18;
+                            values.shadow.size = 15;
+                            values.shadow.color = 'rgba(0, 0, 0, 0.4)';
                             values.borderWidth = 5;
                         }
+                    },
+                    scaling: {
+                        min: 20,
+                        max: 50
                     }
                 };
             });
 
             const edges = architecture.connections.map((conn, index) => {
                 const protocolColors = {
-                    'HTTPS': '#10b981',
-                    'HTTP': '#3b82f6',
-                    'PostgreSQL': '#8b5cf6',
-                    'Redis': '#f59e0b'
+                    'HTTPS': { color: '#8B5CF6', glow: 'rgba(139, 92, 246, 0.3)' },  // Purple
+                    'HTTP': { color: '#6B7280', glow: 'rgba(107, 114, 128, 0.3)' },  // Gray
+                    'PostgreSQL': { color: '#10B981', glow: 'rgba(16, 185, 129, 0.3)' },  // Green
+                    'Redis': { color: '#10B981', glow: 'rgba(16, 185, 129, 0.3)' }  // Green
                 };
                 
                 const isHTTPS = conn.protocol === 'HTTPS';
                 const isActive = activeConnections.has(conn.id);
-                const edgeWidth = isHTTPS ? (isActive ? 5 : 4) : (isActive ? 4 : 3);
+                const protocolStyle = protocolColors[conn.protocol] || { color: '#6B7280', glow: 'rgba(107, 114, 128, 0.2)' };
+                const edgeWidth = isHTTPS ? (isActive ? 4 : 3) : (isActive ? 3.5 : 2.5);
                 const edgeLabel = isHTTPS ? `🔒 ${conn.protocol}` : conn.protocol;
                 
                 const requestPathsText = conn.requestPaths 
@@ -1996,17 +2062,20 @@
                     arrows: {
                         to: {
                             enabled: true,
-                            scaleFactor: 1.2,
-                            type: 'arrow'
+                            scaleFactor: isActive ? 1.4 : 1.2,
+                            type: 'arrow',
+                            length: isActive ? 18 : 14,
+                            width: isActive ? 7 : 5
                         }
                     },
                     color: {
-                        color: isActive ? '#ef4444' : (protocolColors[conn.protocol] || '#6b7280'),
-                        highlight: isActive ? '#dc2626' : lightenColor(protocolColors[conn.protocol] || '#6b7280', 20),
-                        hover: isActive ? '#ef4444' : (protocolColors[conn.protocol] || '#6b7280')
+                        color: isActive ? '#EF4444' : protocolStyle.color,
+                        highlight: isActive ? '#DC2626' : lightenColor(protocolStyle.color, 20),
+                        hover: isActive ? '#EF4444' : lightenColor(protocolStyle.color, 10),
+                        opacity: isActive ? 1.0 : 0.7
                     },
                     width: edgeWidth,
-                    dashes: isHTTPS ? false : (isActive ? [5, 5] : false),
+                    dashes: isHTTPS ? false : (isActive ? [6, 3] : false),
                     animation: isActive ? {
                         duration: 1000,
                         easingFunction: 'linear'
@@ -2016,17 +2085,20 @@
                         roundness: 0.5
                     },
                     font: {
-                        size: isActive ? 12 : 11,
+                        size: isActive ? 12 : 10,
                         align: 'middle',
-                        color: isActive ? '#ef4444' : '#374151',
-                        background: '#ffffff',
+                        color: isActive ? '#FFFFFF' : '#374151',
+                        background: isActive ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255, 255, 255, 0.95)',
                         strokeWidth: 2,
-                        strokeColor: '#ffffff',
+                        strokeColor: isActive ? '#EF4444' : '#FFFFFF',
                         bold: isActive
                     },
                     labelHighlightBold: isActive,
                     selectionWidth: isActive ? 5 : 4,
-                    hoverWidth: isActive ? 5 : 4
+                    hoverWidth: isActive ? 5 : 4,
+                    shadow: {
+                        enabled: false
+                    }
                 };
             });
 
@@ -2036,32 +2108,51 @@
                 nodes: {
                     font: {
                         size: 16,
-                        face: 'Arial',
-                        color: '#ffffff',
-                        bold: true
+                        face: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Arial, sans-serif',
+                        color: '#FFFFFF',
+                        bold: true,
+                        strokeWidth: 2,
+                        strokeColor: 'rgba(0, 0, 0, 0.4)'
                     },
                     borderWidth: 3,
+                    borderWidthSelected: 5,
                     shadow: {
                         enabled: true,
-                        color: 'rgba(0,0,0,0.3)',
-                        size: 10
+                        color: 'rgba(0, 0, 0, 0.25)',
+                        size: 8,
+                        x: 2,
+                        y: 2
+                    },
+                    scaling: {
+                        min: 20,
+                        max: 50
                     }
                 },
                 edges: {
-                    width: 3,
+                    width: 2.5,
                     smooth: {
                         type: 'continuous',
                         roundness: 0.5
                     },
                     font: {
-                        size: 11,
-                        align: 'middle'
+                        size: 10,
+                        align: 'middle',
+                        color: '#374151',
+                        background: 'rgba(255, 255, 255, 0.95)',
+                        strokeWidth: 2,
+                        strokeColor: '#FFFFFF',
+                        bold: false
                     },
                     arrows: {
                         to: {
                             enabled: true,
-                            scaleFactor: 1.2
+                            scaleFactor: 1.2,
+                            length: 14,
+                            width: 5
                         }
+                    },
+                    shadow: {
+                        enabled: false
                     }
                 },
                 physics: {
@@ -2069,7 +2160,8 @@
                     stabilization: {
                         enabled: true,
                         iterations: 200,
-                        fit: true
+                        fit: true,
+                        updateInterval: 25
                     },
                     barnesHut: {
                         gravitationalConstant: -2000,
@@ -2082,18 +2174,20 @@
                 },
                 interaction: {
                     hover: true,
-                    tooltipDelay: 100,
+                    tooltipDelay: 150,
                     zoomView: true,
-                    dragView: true
+                    dragView: true,
+                    selectConnectedEdges: true,
+                    multiselect: false
                 },
                 layout: {
                     hierarchical: {
                         enabled: true,
-                        direction: 'LR',  // Left to Right instead of Up Down to prevent wrapping
+                        direction: 'LR',
                         sortMethod: 'directed',
-                        levelSeparation: 250,
-                        nodeSpacing: 200,
-                        treeSpacing: 250,
+                        levelSeparation: 300,
+                        nodeSpacing: 250,
+                        treeSpacing: 300,
                         blockShifting: true,
                         edgeMinimization: true,
                         parentCentralization: true,

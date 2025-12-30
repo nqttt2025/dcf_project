@@ -410,6 +410,32 @@ async def list_sync_jobs():
     """List all active sync jobs"""
     return await make_service_request(DATABASE_SERVICE_URL, "GET", "/api/database/sync/jobs", timeout=10.0)
 
+@app.post("/api/database/sync/jobs/{job_id}/trigger")
+async def trigger_scheduled_job(job_id: str):
+    """Trigger a scheduled job manually"""
+    return await make_service_request(DATABASE_SERVICE_URL, "POST", f"/api/database/sync/jobs/{job_id}/trigger", timeout=30.0)
+
+@app.post("/api/database/sync/current-price")
+async def sync_current_price(ticker: Optional[str] = Query(None)):
+    """Sync current stock price"""
+    url = f"/api/database/sync/current-price"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
+
+@app.post("/api/database/sync/base-pe")
+async def sync_base_pe(ticker: Optional[str] = Query(None)):
+    """Update base PE for stocks"""
+    url = f"/api/database/sync/base-pe"
+    if ticker:
+        url += f"?ticker={ticker}"
+    return await make_service_request(DATABASE_SERVICE_URL, "POST", url, timeout=30.0)
+
+@app.get("/api/database/stocks/{ticker}")
+async def get_stock_info(ticker: str):
+    """Get comprehensive stock information from database"""
+    return await make_service_request(DATABASE_SERVICE_URL, "GET", f"/api/database/stocks/{ticker}", timeout=30.0)
+
 # ==================== Logs Routes ====================
 
 # Service container name mapping

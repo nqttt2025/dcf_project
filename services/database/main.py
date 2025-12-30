@@ -73,10 +73,23 @@ except Exception as e:
     print(f"Warning: Redis connection failed: {e}")
 
 
+# Scheduled jobs storage
+scheduled_jobs = {}
+job_scheduler = None
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables"""
+    """Initialize database tables and register scheduled jobs (but don't start them automatically)"""
     Base.metadata.create_all(bind=engine)
+    logger.info("Database tables initialized")
+    
+    # Register scheduled jobs info (but don't start scheduler automatically)
+    # Jobs will be triggered manually from frontend
+    try:
+        register_scheduled_jobs_info()
+        logger.info("Scheduled jobs registered (manual trigger only)")
+    except Exception as e:
+        logger.error(f"Failed to register scheduled jobs: {e}", exc_info=True)
 
 
 @app.get("/")
@@ -418,27 +431,114 @@ async def list_stocks(
 
 
 @app.get("/api/database/stocks/{ticker}")
-async def get_stock(ticker: str, db: Session = Depends(get_db)):
-    """Get stock by ticker"""
-    stock = db.query(Stock).filter(Stock.ticker == ticker.upper()).first()
+async def get_stock_info(ticker: str, db: Session = Depends(get_db)):
+    """Get comprehensive stock information from database"""
+    ticker = ticker.upper()
     
-    if not stock:
-        raise HTTPException(status_code=404, detail=f"Stock {ticker} not found")
-    
-    return {
-        "id": stock.id,
-        "ticker": stock.ticker,
-        "name": stock.name,
-        "sector": stock.sector,
-        "industry": stock.industry,
-        "exchange": stock.exchange,
-        "is_vn30": stock.is_vn30,
-        "is_active": stock.is_active,
-        "last_sync_date": stock.last_sync_date.isoformat() if stock.last_sync_date else None,
-        "sync_status": stock.sync_status,
-        "created_at": stock.created_at.isoformat() if stock.created_at else None,
-        "updated_at": stock.updated_at.isoformat() if stock.updated_at else None,
-    }
+    try:
+        # Get stock basic info
+        stock_query = text("SELECT * FROM stocks WHERE ticker = :ticker AND is_active = TRUE")
+        stock = db.execute(stock_query, {"ticker": ticker}).fetchone()
+        
+        if not stock:
+            raise HTTPException(status_code=404, detail=f"Stock {ticker} not found or inactive")
+        
+        stock_dict = dict(stock._mapping) if hasattr(stock, '_mapping') else dict(zip(stock.keys(), stock))
+        
+        # Get latest market data
+        market_data_query = text("""
+            SELECT * FROM market_data 
+            WHERE stock_id = :stock_id 
+            ORDER BY trade_date DESC 
+            LIMIT 1
+        """)
+        market_data = db.execute(market_data_query, {"stock_id": stock_dict['id']}).fetchone()
+        market_data_dict = None
+        if market_data:
+            market_data_dict = dict(market_data._mapping) if hasattr(market_data, '_mapping') else dict(zip(market_data.keys(), market_data))
+        
+        # Get latest financial data (TTM)
+        financial_query = text("""
+            SELECT 
+                SUM(CASE WHEN period_type = 'quarter' AND period_date >= CURRENT_DATE - INTERVAL '1 year' 
+                    THEN operating_cash_flow ELSE 0 END) as ttm_ocf,
+                SUM(CASE WHEN period_type = 'quarter' AND period_date >= CURRENT_DATE - INTERVAL '1 year' 
+                    THEN capital_expenditures ELSE 0 END) as ttm_capex,
+                SUM(CASE WHEN period_type = 'quarter' AND period_date >= CURRENT_DATE - INTERVAL '1 year' 
+                    THEN operating_cash_flow ELSE 0 END) - 
+                ABS(SUM(CASE WHEN period_type = 'quarter' AND period_date >= CURRENT_DATE - INTERVAL '1 year' 
+                    THEN capital_expenditures ELSE 0 END)) as ttm_fcf
+            FROM financial_data 
+            WHERE stock_id = :stock_id
+        """)
+        financial_data = db.execute(financial_query, {"stock_id": stock_dict['id']}).fetchone()
+        financial_dict = None
+        if financial_data:
+            financial_dict = dict(financial_data._mapping) if hasattr(financial_data, '_mapping') else dict(zip(financial_data.keys(), financial_data))
+        
+        # Get latest shares outstanding
+        shares_query = text("""
+            SELECT * FROM shares_outstanding 
+            WHERE stock_id = :stock_id 
+            ORDER BY period_date DESC 
+            LIMIT 1
+        """)
+        shares_data = db.execute(shares_query, {"stock_id": stock_dict['id']}).fetchone()
+        shares_dict = None
+        if shares_data:
+            shares_dict = dict(shares_data._mapping) if hasattr(shares_data, '_mapping') else dict(zip(shares_data.keys(), shares_data))
+        
+        # Get latest EPS - calculate from net_profit and shares if available
+        eps = None
+        try:
+            eps_query = text("""
+                SELECT net_profit FROM financial_data 
+                WHERE stock_id = :stock_id AND net_profit IS NOT NULL
+                ORDER BY period_date DESC 
+                LIMIT 1
+            """)
+            net_profit_result = db.execute(eps_query, {"stock_id": stock_dict['id']}).fetchone()
+            if net_profit_result and net_profit_result[0] and shares_dict and shares_dict.get('shares'):
+                eps = net_profit_result[0] / shares_dict['shares']
+        except Exception as e:
+            logger.debug(f"Could not calculate EPS for {ticker}: {e}")
+            eps = None
+        
+        # Calculate PE ratio if we have price and EPS
+        pe_ratio = None
+        if market_data_dict and market_data_dict.get('close_price') and eps:
+            pe_ratio = market_data_dict['close_price'] / eps
+        
+        # Calculate market cap if we have price and shares
+        market_cap = None
+        if market_data_dict and market_data_dict.get('close_price') and shares_dict and shares_dict.get('shares'):
+            market_cap = market_data_dict['close_price'] * shares_dict['shares']
+        
+        return {
+            "ticker": ticker,
+            "stock": stock_dict,
+            "market_data": market_data_dict,
+            "financial_data": financial_dict,
+            "shares_outstanding": shares_dict,
+            "metrics": {
+                "current_price": market_data_dict.get('close_price') if market_data_dict else None,
+                "market_cap": market_cap,
+                "pe_ratio": pe_ratio,
+                "eps": eps,
+                "ttm_fcf": financial_dict.get('ttm_fcf') if financial_dict else None,
+                "shares": shares_dict.get('shares') if shares_dict else None
+            },
+            "last_updated": {
+                "market_data": market_data_dict.get('trade_date').isoformat() if market_data_dict and market_data_dict.get('trade_date') else None,
+                "financial_data": financial_dict.get('period_date').isoformat() if financial_dict and financial_dict.get('period_date') else None,
+                "shares": shares_dict.get('period_date').isoformat() if shares_dict and shares_dict.get('period_date') else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting stock info for {ticker}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error retrieving stock information: {str(e)}")
 
 
 @app.post("/api/database/sync/growth-metrics")
@@ -712,6 +812,85 @@ def perform_sync_sync(
     finally:
         db.close()
 
+@app.post("/api/database/sync/current-price")
+async def sync_current_price_endpoint(
+    ticker: Optional[str] = Query(None, description="Sync for specific ticker, or all if not provided"),
+    db: Session = Depends(get_db)
+):
+    """Sync current stock price (runs in background)"""
+    if not SYNC_SERVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sync service is not available. Please check service logs for details."
+        )
+    
+    sync_id = f"current_price_{ticker or 'all'}"
+    
+    # Start sync in background
+    import threading
+    from .sync_service import sync_current_price
+    
+    def run_current_price_sync():
+        db_session = next(get_db())
+        try:
+            sync_current_price(db_session, ticker)
+        finally:
+            db_session.close()
+    
+    thread = threading.Thread(
+        target=run_current_price_sync,
+        daemon=True
+    )
+    thread.start()
+    
+    return {
+        "message": f"Current price sync started for {ticker or 'all stocks'}",
+        "ticker": ticker,
+        "sync_id": sync_id,
+        "status": "running",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/api/database/sync/base-pe")
+async def sync_base_pe_endpoint(
+    ticker: Optional[str] = Query(None, description="Update base PE for specific ticker, or all if not provided"),
+    db: Session = Depends(get_db)
+):
+    """Update base PE for stocks (runs in background)"""
+    if not SYNC_SERVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sync service is not available. Please check service logs for details."
+        )
+    
+    sync_id = f"base_pe_{ticker or 'all'}"
+    
+    # Start sync in background
+    import threading
+    from .sync_service import sync_base_pe
+    
+    def run_base_pe_sync():
+        db_session = next(get_db())
+        try:
+            sync_base_pe(db_session, ticker)
+        finally:
+            db_session.close()
+    
+    thread = threading.Thread(
+        target=run_base_pe_sync,
+        daemon=True
+    )
+    thread.start()
+    
+    return {
+        "message": f"Base PE update started for {ticker or 'all stocks'}",
+        "ticker": ticker,
+        "sync_id": sync_id,
+        "status": "running",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
 @app.post("/api/database/sync/{table_name}")
 async def sync_table_data(
     table_name: str,
@@ -797,10 +976,30 @@ async def get_sync_status(
 
 
 @app.get("/api/database/sync/jobs")
+        raise
+    except Exception as e:
+        logger.error(f"Error getting stock info for {ticker}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error retrieving stock information: {str(e)}")
+
+@app.get("/api/database/sync/jobs")
 async def list_sync_jobs():
-    """List all active sync jobs"""
+    """List all sync jobs including scheduled, active, and completed"""
     import json
     jobs = []
+    
+    # Add scheduled jobs from scheduled_jobs dict (this is the source of truth)
+    scheduled_job_list = []
+    for job_id, job_info in scheduled_jobs.items():
+        scheduled_job_list.append({
+            "sync_id": job_id,
+            "name": job_info.get('name', job_id),
+            "description": job_info.get('description', ''),
+            "status": job_info.get('status', 'manual'),
+            "job_type": job_info.get('job_type', 'unknown'),  # Use actual job_type from job_info
+            "days": job_info.get('days'),
+            "next_run": job_info.get('next_run'),
+            "schedule": job_info.get('schedule', 'Manual trigger only')
+        })
     
     # Get jobs from Redis
     if HAS_REDIS and sync_redis_client and sync_redis_client._client:
@@ -819,7 +1018,7 @@ async def list_sync_jobs():
                 except Exception as e:
                     continue
         except Exception as e:
-            pass
+            logger.warning(f"Error reading jobs from Redis: {e}")
     
     # Add jobs from memory store
     for sync_id, status in sync_status_store.items():
@@ -832,9 +1031,9 @@ async def list_sync_jobs():
     # Sort by started_at (most recent first)
     jobs.sort(key=lambda x: x.get('started_at', ''), reverse=True)
     
-    # Filter out completed/failed jobs older than 1 hour
+    # Filter out completed/failed jobs older than 2 hours
     from datetime import datetime, timedelta
-    cutoff_time = datetime.now() - timedelta(hours=1)
+    cutoff_time = datetime.now() - timedelta(hours=2)
     active_jobs = []
     completed_jobs = []
     
@@ -861,12 +1060,300 @@ async def list_sync_jobs():
                 active_jobs.append(job)
     
     return {
+        "scheduled_jobs": scheduled_job_list,
         "active_jobs": active_jobs,
         "recent_completed": completed_jobs,
+        "total_scheduled": len(scheduled_job_list),
         "total_active": len(active_jobs),
         "total_recent_completed": len(completed_jobs)
     }
 
+
+def register_scheduled_jobs_info():
+    """Register scheduled jobs info (for manual trigger only)"""
+    # Store scheduled job info (without starting scheduler)
+    scheduled_jobs['market_data_sync_recent'] = {
+        'id': 'market_data_sync_recent',
+        'name': 'Market Data Sync (Recent 7 days)',
+        'description': 'Sync market data for the last 7 days for all active stocks',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'market_data',
+        'days': 7,
+        'next_run': None
+    }
+    
+    scheduled_jobs['market_data_sync_full'] = {
+        'id': 'market_data_sync_full',
+        'name': 'Market Data Sync (Full 30 days)',
+        'description': 'Sync market data for the last 30 days for all active stocks',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'market_data',
+        'days': 30,
+        'next_run': None
+    }
+    
+    scheduled_jobs['financial_data_sync'] = {
+        'id': 'financial_data_sync',
+        'name': 'Financial Data Sync',
+        'description': 'Sync financial data (income statement, balance sheet, cash flow) for all active stocks',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'financial_data',
+        'days': None,
+        'next_run': None
+    }
+    
+    scheduled_jobs['shares_outstanding_sync'] = {
+        'id': 'shares_outstanding_sync',
+        'name': 'Shares Outstanding Sync',
+        'description': 'Sync shares outstanding data for all active stocks',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'shares_outstanding',
+        'days': None,
+        'next_run': None
+    }
+    
+    scheduled_jobs['current_price_sync'] = {
+        'id': 'current_price_sync',
+        'name': 'Current Price Sync',
+        'description': 'Sync current stock price for all active stocks (updates today\'s price)',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'current_price',
+        'days': None,
+        'next_run': None
+    }
+    
+    scheduled_jobs['base_pe_update'] = {
+        'id': 'base_pe_update',
+        'name': 'Base PE Update',
+        'description': 'Calculate and update base PE for all stocks based on industry and current PE',
+        'schedule': 'Manual trigger only',
+        'status': 'manual',
+        'job_type': 'base_pe',
+        'days': None,
+        'next_run': None
+    }
+    
+    logger.info(f"Registered {len(scheduled_jobs)} scheduled jobs for manual trigger")
+
+@app.post("/api/database/sync/jobs/{job_id}/trigger")
+async def trigger_scheduled_job(job_id: str, db: Session = Depends(get_db)):
+    """Trigger a scheduled job manually"""
+    if job_id not in scheduled_jobs:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    
+    job_info = scheduled_jobs[job_id]
+    job_type = job_info.get('job_type')
+    days = job_info.get('days')
+    
+    logger.info(f"Manually triggering job: {job_id} ({job_info.get('name')})")
+    
+    # Generate sync ID
+    sync_id = f"{job_id}_manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Start sync in background
+    import threading
+    
+    if job_type == 'market_data':
+        if days:
+            thread = threading.Thread(
+                target=perform_sync_sync,
+                args=("market_data", None, days, sync_id),
+                daemon=True
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Days parameter required for market_data sync")
+    elif job_type == 'financial_data':
+        thread = threading.Thread(
+            target=perform_sync_sync,
+            args=("financial_data", None, 0, sync_id),
+            daemon=True
+        )
+    elif job_type == 'shares_outstanding':
+        thread = threading.Thread(
+            target=perform_sync_sync,
+            args=("shares_outstanding", None, 0, sync_id),
+            daemon=True
+        )
+    elif job_type == 'current_price':
+        # Import sync function
+        from .sync_service import sync_current_price
+        from .database import get_db
+        
+        def run_current_price_sync():
+            db_session = next(get_db())
+            try:
+                sync_current_price(db_session, ticker=None)
+            finally:
+                db_session.close()
+        
+        thread = threading.Thread(
+            target=run_current_price_sync,
+            daemon=True
+        )
+    elif job_type == 'base_pe':
+        # Import PE update function
+        from .sync_service import sync_base_pe
+        from .database import get_db
+        
+        def run_base_pe_update():
+            db_session = next(get_db())
+            try:
+                sync_base_pe(db_session, ticker=None)
+            finally:
+                db_session.close()
+        
+        thread = threading.Thread(
+            target=run_base_pe_update,
+            daemon=True
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown job type: {job_type}")
+    
+    thread.start()
+    
+    return {
+        "message": f"Job '{job_info.get('name')}' triggered successfully",
+        "job_id": job_id,
+        "sync_id": sync_id,
+        "status": "running",
+        "timestamp": datetime.now().isoformat()
+    }
+
+def run_scheduled_market_data_sync():
+    """Run scheduled market data sync (last 7 days)"""
+    logger.info("Starting scheduled market data sync (last 7 days)")
+    try:
+        from .database import get_db
+        db = next(get_db())
+        
+        sync_id = f"market_data_scheduled_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Update status
+        status = {
+            "status": "running",
+            "table": "market_data",
+            "ticker": None,
+            "progress": "Starting scheduled sync...",
+            "progress_percent": 0.0,
+            "started_at": datetime.now().isoformat(),
+            "job_type": "scheduled",
+            "days": 7
+        }
+        
+        try:
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
+        except:
+            sync_status_store[sync_id] = status
+        
+        # Run sync
+        from .sync_service import sync_market_data
+        results = sync_market_data(db, ticker=None, days=7)
+        
+        # Update status to completed
+        status["status"] = "completed"
+        status["progress"] = "Scheduled sync completed"
+        status["progress_percent"] = 100.0
+        status["completed_at"] = datetime.now().isoformat()
+        status["summary"] = results
+        
+        try:
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
+        except:
+            sync_status_store[sync_id] = status
+        
+        logger.info(f"Scheduled market data sync completed: {results.get('success', 0)} success, {results.get('failed', 0)} failed")
+        db.close()
+        
+    except Exception as e:
+        logger.error(f"Error in scheduled market data sync: {e}", exc_info=True)
+        try:
+            status["status"] = "failed"
+            status["error"] = str(e)
+            status["failed_at"] = datetime.now().isoformat()
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 3600, json.dumps(status))
+        except:
+            pass
+
+def run_scheduled_market_data_sync_full():
+    """Run scheduled full market data sync (last 30 days)"""
+    logger.info("Starting scheduled full market data sync (last 30 days)")
+    try:
+        from .database import get_db
+        db = next(get_db())
+        
+        sync_id = f"market_data_scheduled_full_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Update status
+        status = {
+            "status": "running",
+            "table": "market_data",
+            "ticker": None,
+            "progress": "Starting scheduled full sync...",
+            "progress_percent": 0.0,
+            "started_at": datetime.now().isoformat(),
+            "job_type": "scheduled_full",
+            "days": 30
+        }
+        
+        try:
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
+        except:
+            sync_status_store[sync_id] = status
+        
+        # Run sync
+        from .sync_service import sync_market_data
+        results = sync_market_data(db, ticker=None, days=30)
+        
+        # Update status to completed
+        status["status"] = "completed"
+        status["progress"] = "Scheduled full sync completed"
+        status["progress_percent"] = 100.0
+        status["completed_at"] = datetime.now().isoformat()
+        status["summary"] = results
+        
+        try:
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
+        except:
+            sync_status_store[sync_id] = status
+        
+        logger.info(f"Scheduled full market data sync completed: {results.get('success', 0)} success, {results.get('failed', 0)} failed")
+        db.close()
+        
+    except Exception as e:
+        logger.error(f"Error in scheduled full market data sync: {e}", exc_info=True)
+        try:
+            status["status"] = "failed"
+            status["error"] = str(e)
+            status["failed_at"] = datetime.now().isoformat()
+            if HAS_REDIS and sync_redis_client and sync_redis_client._client:
+                import json
+                sync_redis_client._client.setex(f"sync:{sync_id}", 7200, json.dumps(status))
+        except:
+            pass
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown scheduled jobs"""
+    global job_scheduler
+    if job_scheduler:
+        logger.info("Shutting down scheduled jobs")
+        job_scheduler.shutdown()
+        job_scheduler = None
 
 if __name__ == "__main__":
     import uvicorn

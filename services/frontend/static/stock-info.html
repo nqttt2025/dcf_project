@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Information - DCF Analysis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .ticker-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .ticker-selector input {
+            padding: 10px 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1em;
+            text-transform: uppercase;
+            width: 120px;
+        }
+        
+        .ticker-selector button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        
+        .ticker-selector button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        
+        .nav-links a:hover {
+            background: #f3f4f6;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card h2 .sync-btn {
+            padding: 6px 12px;
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+        
+        .card h2 .sync-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .info-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .info-label {
+            color: #6b7280;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            color: #111827;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        .info-value.highlight {
+            color: #667eea;
+            font-size: 1.1em;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .status-badge.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-badge.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+            text-align: center;
+        }
+        
+        .metric-label {
+            color: #6b7280;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value {
+            color: #667eea;
+            font-size: 1.8em;
+            font-weight: 700;
+        }
+        
+        .last-updated {
+            font-size: 0.8em;
+            color: #9ca3af;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📊 Stock Information</h1>
+                <p style="color: #6b7280; margin-top: 5px;">View and update stock data</p>
+            </div>
+            <div class="ticker-selector">
+                <input type="text" id="tickerInput" placeholder="Ticker" value="VJC" maxlength="10">
+                <button onclick="loadStockInfo()">Load</button>
+            </div>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/static/database.html">Database Monitor</a>
+                <a href="/static/monitoring.html">System Monitor</a>
+            </div>
+        </div>
+        
+        <div id="errorContainer"></div>
+        <div id="loadingContainer" class="loading">
+            <p>Loading stock information...</p>
+        </div>
+        
+        <div id="contentContainer" class="content" style="display: none;">
+            <!-- Basic Information -->
+            <div class="card">
+                <h2>
+                    📋 Basic Information
+                    <button class="sync-btn" onclick="syncStockInfo()">🔄 Refresh</button>
+                </h2>
+                <div class="info-grid" id="basicInfo"></div>
+            </div>
+            
+            <!-- Key Metrics -->
+            <div class="card">
+                <h2>
+                    📈 Key Metrics
+                    <button class="sync-btn" onclick="syncCurrentPrice()">💰 Sync Price</button>
+                </h2>
+                <div class="metrics-grid" id="keyMetrics"></div>
+            </div>
+            
+            <!-- Market Data -->
+            <div class="card">
+                <h2>
+                    📊 Market Data
+                    <button class="sync-btn" onclick="syncMarketData()">🔄 Sync Market Data</button>
+                </h2>
+                <div class="info-grid" id="marketData"></div>
+            </div>
+            
+            <!-- Financial Data -->
+            <div class="card">
+                <h2>
+                    💰 Financial Data (TTM)
+                    <button class="sync-btn" onclick="syncFinancialData()">🔄 Sync Financial</button>
+                </h2>
+                <div class="info-grid" id="financialData"></div>
+            </div>
+            
+            <!-- Shares Outstanding -->
+            <div class="card">
+                <h2>
+                    📦 Shares Outstanding
+                    <button class="sync-btn" onclick="syncShares()">🔄 Sync Shares</button>
+                </h2>
+                <div class="info-grid" id="sharesData"></div>
+            </div>
+            
+            <!-- Valuation & Config -->
+            <div class="card">
+                <h2>
+                    🎯 Valuation & Config
+                    <button class="sync-btn" onclick="syncBasePE()">📊 Update Base PE</button>
+                </h2>
+                <div class="info-grid" id="valuationData"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const GATEWAY_URL = 'https://localhost:8000';
+        let currentTicker = '';
+        
+        // Load stock info on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const ticker = urlParams.get('ticker') || 'VJC';
+            document.getElementById('tickerInput').value = ticker;
+            loadStockInfo();
+        });
+        
+        // Load stock info when Enter is pressed
+        document.getElementById('tickerInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                loadStockInfo();
+            }
+        });
+        
+        async function loadStockInfo() {
+            const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+            if (!ticker) {
+                showError('Please enter a ticker symbol');
+                return;
+            }
+            
+            currentTicker = ticker;
+            document.getElementById('loadingContainer').style.display = 'block';
+            document.getElementById('contentContainer').style.display = 'none';
+            document.getElementById('errorContainer').innerHTML = '';
+            
+            try {
+                const response = await fetch(`${GATEWAY_URL}/api/database/stocks/${ticker}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+                    throw new Error(errorData.detail || 'Failed to load stock information');
+                }
+                
+                const data = await response.json();
+                displayStockInfo(data);
+                
+            } catch (error) {
+                console.error('Error loading stock info:', error);
+                showError(`Error loading stock information: ${error.message}`);
+            } finally {
+                document.getElementById('loadingContainer').style.display = 'none';
+            }
+        }
+        
+        function displayStockInfo(data) {
+            document.getElementById('contentContainer').style.display = 'grid';
+            
+            // Basic Information
+            const basicInfo = document.getElementById('basicInfo');
+            basicInfo.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Ticker</span>
+                    <span class="info-value highlight">${data.ticker}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Company Name</span>
+                    <span class="info-value">${data.stock.name || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Sector</span>
+                    <span class="info-value">${data.stock.sector || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Industry</span>
+                    <span class="info-value">${data.stock.industry || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Exchange</span>
+                    <span class="info-value">${data.stock.exchange || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Status</span>
+                    <span class="info-value">
+                        <span class="status-badge ${data.stock.is_active ? 'success' : 'error'}">
+                            ${data.stock.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </span>
+                </div>
+            `;
+            
+            // Key Metrics
+            const metrics = data.metrics || {};
+            const keyMetrics = document.getElementById('keyMetrics');
+            keyMetrics.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-label">Current Price</div>
+                    <div class="metric-value">${formatNumber(metrics.current_price)}</div>
+                    <div class="last-updated">${formatDate(data.last_updated.market_data)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Market Cap</div>
+                    <div class="metric-value">${formatNumber(metrics.market_cap, true)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">P/E Ratio</div>
+                    <div class="metric-value">${formatNumber(metrics.pe_ratio, false, 2)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">EPS</div>
+                    <div class="metric-value">${formatNumber(metrics.eps, false, 2)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">TTM FCF</div>
+                    <div class="metric-value">${formatNumber(metrics.ttm_fcf, true)}</div>
+                    <div class="last-updated">${formatDate(data.last_updated.financial_data)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Shares</div>
+                    <div class="metric-value">${formatNumber(metrics.shares, true)}</div>
+                    <div class="last-updated">${formatDate(data.last_updated.shares)}</div>
+                </div>
+            `;
+            
+            // Market Data
+            const marketData = document.getElementById('marketData');
+            if (data.market_data) {
+                marketData.innerHTML = `
+                    <div class="info-item">
+                        <span class="info-label">Trade Date</span>
+                        <span class="info-value">${formatDate(data.market_data.trade_date)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Open Price</span>
+                        <span class="info-value">${formatNumber(data.market_data.open_price)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">High Price</span>
+                        <span class="info-value">${formatNumber(data.market_data.high_price)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Low Price</span>
+                        <span class="info-value">${formatNumber(data.market_data.low_price)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Close Price</span>
+                        <span class="info-value highlight">${formatNumber(data.market_data.close_price)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Volume</span>
+                        <span class="info-value">${formatNumber(data.market_data.volume, true)}</span>
+                    </div>
+                `;
+            } else {
+                marketData.innerHTML = '<div class="info-item"><span class="info-label">No market data available</span></div>';
+            }
+            
+            // Financial Data
+            const financialData = document.getElementById('financialData');
+            if (data.financial_data) {
+                financialData.innerHTML = `
+                    <div class="info-item">
+                        <span class="info-label">TTM Operating Cash Flow</span>
+                        <span class="info-value">${formatNumber(data.financial_data.ttm_ocf, true)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">TTM Capital Expenditures</span>
+                        <span class="info-value">${formatNumber(data.financial_data.ttm_capex, true)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">TTM Free Cash Flow</span>
+                        <span class="info-value highlight">${formatNumber(data.financial_data.ttm_fcf, true)}</span>
+                    </div>
+                `;
+            } else {
+                financialData.innerHTML = '<div class="info-item"><span class="info-label">No financial data available</span></div>';
+            }
+            
+            // Shares Outstanding
+            const sharesData = document.getElementById('sharesData');
+            if (data.shares_outstanding) {
+                sharesData.innerHTML = `
+                    <div class="info-item">
+                        <span class="info-label">Period Date</span>
+                        <span class="info-value">${formatDate(data.shares_outstanding.period_date)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Shares Outstanding</span>
+                        <span class="info-value highlight">${formatNumber(data.shares_outstanding.shares, true)}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Source</span>
+                        <span class="info-value">${data.shares_outstanding.data_source || 'N/A'}</span>
+                    </div>
+                `;
+            } else {
+                sharesData.innerHTML = '<div class="info-item"><span class="info-label">No shares data available</span></div>';
+            }
+            
+            // Valuation & Config (placeholder - can be extended)
+            const valuationData = document.getElementById('valuationData');
+            valuationData.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Base PE</span>
+                    <span class="info-value">Check config file</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">DCF Parameters</span>
+                    <span class="info-value">Check config file</span>
+                </div>
+            `;
+        }
+        
+        async function syncCurrentPrice() {
+            await syncData('current-price', 'Syncing current price...');
+        }
+        
+        async function syncMarketData() {
+            await syncData('market_data', 'Syncing market data...', { days: 7 });
+        }
+        
+        async function syncFinancialData() {
+            await syncData('financial_data', 'Syncing financial data...');
+        }
+        
+        async function syncShares() {
+            await syncData('shares_outstanding', 'Syncing shares outstanding...');
+        }
+        
+        async function syncBasePE() {
+            await syncData('base-pe', 'Updating base PE...');
+        }
+        
+        async function syncStockInfo() {
+            await loadStockInfo();
+        }
+        
+        async function syncData(endpoint, message, params = {}) {
+            if (!currentTicker) {
+                showError('Please load a stock first');
+                return;
+            }
+            
+            try {
+                let url = `${GATEWAY_URL}/api/database/sync/${endpoint}?ticker=${currentTicker}`;
+                if (params.days) {
+                    url += `&days=${params.days}`;
+                }
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+                    throw new Error(errorData.detail || 'Sync failed');
+                }
+                
+                const data = await response.json();
+                showSuccess(`${message} - ${data.message || 'Started'}`);
+                
+                // Reload stock info after a delay
+                setTimeout(() => {
+                    loadStockInfo();
+                }, 2000);
+                
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            }
+        }
+        
+        function formatNumber(value, isLarge = false, decimals = 0) {
+            if (value === null || value === undefined) return 'N/A';
+            if (isLarge) {
+                if (value >= 1e12) return (value / 1e12).toFixed(decimals) + 'T';
+                if (value >= 1e9) return (value / 1e9).toFixed(decimals) + 'B';
+                if (value >= 1e6) return (value / 1e6).toFixed(decimals) + 'M';
+                if (value >= 1e3) return (value / 1e3).toFixed(decimals) + 'K';
+            }
+            return value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch {
+                return dateStr;
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('errorContainer').innerHTML = `
+                <div class="error">${message}</div>
+            `;
+            setTimeout(() => {
+                document.getElementById('errorContainer').innerHTML = '';
+            }, 5000);
+        }
+        
+        function showSuccess(message) {
+            document.getElementById('errorContainer').innerHTML = `
+                <div style="background: #d1fae5; color: #065f46; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    ${message}
+                </div>
+            `;
+            setTimeout(() => {
+                document.getElementById('errorContainer').innerHTML = '';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+
