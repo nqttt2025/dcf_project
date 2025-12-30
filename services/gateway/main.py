@@ -146,83 +146,83 @@ async def make_service_request(
     async with _request_semaphore:
         for attempt in range(max_retries):
             try:
-            # Use exponential backoff for retries
-            if attempt > 0:
-                delay = retry_delay * (2 ** (attempt - 1))
-                logger.info(f"Retrying {service_name} request (attempt {attempt + 1}/{max_retries}) after {delay}s")
-                await asyncio.sleep(delay)
-            
-            # Make request
-            if method.upper() == "GET":
-                response = await client.get(url, timeout=timeout)
-            elif method.upper() == "POST":
-                response = await client.post(url, json=json_data, timeout=timeout)
-            else:
-                raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
-            
-            # Check response status
-            if response.status_code not in [200, 201]:
-                error_detail = "Unknown error"
-                try:
-                    error_data = response.json()
-                    error_detail = error_data.get("detail", str(response.status_code))
-                except:
-                    error_detail = f"HTTP {response.status_code}: {response.text[:200]}"
+                # Use exponential backoff for retries
+                if attempt > 0:
+                    delay = retry_delay * (2 ** (attempt - 1))
+                    logger.info(f"Retrying {service_name} request (attempt {attempt + 1}/{max_retries}) after {delay}s")
+                    await asyncio.sleep(delay)
                 
-                # Retry on 5xx errors, but not on 4xx
-                if response.status_code >= 500 and attempt < max_retries - 1:
-                    logger.warning(f"{service_name} returned {response.status_code}, retrying...")
-                    last_exception = HTTPException(status_code=response.status_code, detail=error_detail)
+                # Make request
+                if method.upper() == "GET":
+                    response = await client.get(url, timeout=timeout)
+                elif method.upper() == "POST":
+                    response = await client.post(url, json=json_data, timeout=timeout)
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
+                
+                # Check response status
+                if response.status_code not in [200, 201]:
+                    error_detail = "Unknown error"
+                    try:
+                        error_data = response.json()
+                        error_detail = error_data.get("detail", str(response.status_code))
+                    except:
+                        error_detail = f"HTTP {response.status_code}: {response.text[:200]}"
+                    
+                    # Retry on 5xx errors, but not on 4xx
+                    if response.status_code >= 500 and attempt < max_retries - 1:
+                        logger.warning(f"{service_name} returned {response.status_code}, retrying...")
+                        last_exception = HTTPException(status_code=response.status_code, detail=error_detail)
+                        continue
+                    else:
+                        raise HTTPException(status_code=response.status_code, detail=error_detail)
+                
+                # Success - return response
+                return response.json()
+                
+            except httpx.TimeoutException as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"{service_name} timeout (attempt {attempt + 1}/{max_retries}), retrying...")
                     continue
                 else:
-                    raise HTTPException(status_code=response.status_code, detail=error_detail)
-            
-            # Success - return response
-            return response.json()
-            
-        except httpx.TimeoutException as e:
-            last_exception = e
-            if attempt < max_retries - 1:
-                logger.warning(f"{service_name} timeout (attempt {attempt + 1}/{max_retries}), retrying...")
-                continue
-            else:
-                raise HTTPException(
-                    status_code=504, 
-                    detail=f"{service_name} service timeout after {max_retries} attempts: {str(e)}"
-                )
-        except httpx.ConnectError as e:
-            last_exception = e
-            if attempt < max_retries - 1:
-                logger.warning(f"{service_name} connection error (attempt {attempt + 1}/{max_retries}), retrying...")
-                continue
-            else:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"{service_name} service unavailable: All connection attempts failed. Service may be overloaded or down."
-                )
-        except httpx.RequestError as e:
-            last_exception = e
-            if attempt < max_retries - 1:
-                logger.warning(f"{service_name} request error (attempt {attempt + 1}/{max_retries}), retrying...")
-                continue
-            else:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"{service_name} service unavailable: {str(e)}"
-                )
-        except HTTPException:
-            # Re-raise HTTP exceptions (already handled)
-            raise
-        except Exception as e:
-            last_exception = e
-            if attempt < max_retries - 1:
-                logger.warning(f"{service_name} error (attempt {attempt + 1}/{max_retries}), retrying...")
-                continue
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error calling {service_name} service after {max_retries} attempts: {str(e)}"
-                )
+                    raise HTTPException(
+                        status_code=504, 
+                        detail=f"{service_name} service timeout after {max_retries} attempts: {str(e)}"
+                    )
+            except httpx.ConnectError as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"{service_name} connection error (attempt {attempt + 1}/{max_retries}), retrying...")
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"{service_name} service unavailable: All connection attempts failed. Service may be overloaded or down."
+                    )
+            except httpx.RequestError as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"{service_name} request error (attempt {attempt + 1}/{max_retries}), retrying...")
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"{service_name} service unavailable: {str(e)}"
+                    )
+            except HTTPException:
+                # Re-raise HTTP exceptions (already handled)
+                raise
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"{service_name} error (attempt {attempt + 1}/{max_retries}), retrying...")
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error calling {service_name} service after {max_retries} attempts: {str(e)}"
+                    )
     
     # If we get here, all retries failed
     if last_exception:

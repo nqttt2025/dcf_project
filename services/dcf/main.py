@@ -82,12 +82,8 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
         started_at=started_at
     )
     
-    # Run analysis in background with semaphore
-    async def run_with_semaphore():
-        async with _analysis_semaphore:
-            await perform_analysis(ticker, str(config_file), started_at)
-    
-    background_tasks.add_task(run_with_semaphore)
+    # Run analysis in background (semaphore is handled in perform_analysis)
+    background_tasks.add_task(perform_analysis, ticker, str(config_file), started_at)
     
     return {
         'message': f'Analysis started for {ticker}',
@@ -98,56 +94,58 @@ async def run_analysis(ticker: str, background_tasks: BackgroundTasks):
 
 async def perform_analysis(ticker: str, config_file: str, started_at: str):
     """Perform DCF analysis with progress tracking"""
-    try:
-        # Update status to processing
-        redis_client.set_analysis_status(
-            ticker,
-            'processing',
-            progress='Fetching financial data...',
-            progress_percent=10.0,
-            started_at=started_at
-        )
-        
-        # Run DCF calculation with progress callbacks
-        result = await calculate_dcf_from_config(config_file, progress_callback=lambda p, msg: 
+    # Use semaphore to limit concurrent analyses
+    async with _analysis_semaphore:
+        try:
+            # Update status to processing
             redis_client.set_analysis_status(
                 ticker,
                 'processing',
-                progress=msg,
-                progress_percent=p,
+                progress='Fetching financial data...',
+                progress_percent=10.0,
                 started_at=started_at
             )
-        )
-        
-        # Mark as completed
-        redis_client.set_analysis_status(
-            ticker,
-            'completed',
-            progress='Analysis completed',
-            progress_percent=100.0,
-            started_at=started_at,
-            completed_at=datetime.now().isoformat(),
-            result=result
-        )
-        
-        # Remove from Redis after 5 minutes (cleanup)
-        await asyncio.sleep(300)  # 5 minutes
-        redis_client.delete_analysis_status(ticker)
-    except Exception as e:
-        # Mark as failed
-        redis_client.set_analysis_status(
-            ticker,
-            'failed',
-            progress=f'Error: {str(e)}',
-            progress_percent=0.0,
-            started_at=started_at,
-            failed_at=datetime.now().isoformat(),
-            error=str(e)
-        )
-        
-        # Remove from Redis after 1 minute (cleanup)
-        await asyncio.sleep(60)  # 1 minute
-        redis_client.delete_analysis_status(ticker)
+            
+            # Run DCF calculation with progress callbacks
+            result = await calculate_dcf_from_config(config_file, progress_callback=lambda p, msg: 
+                redis_client.set_analysis_status(
+                    ticker,
+                    'processing',
+                    progress=msg,
+                    progress_percent=p,
+                    started_at=started_at
+                )
+            )
+            
+            # Mark as completed
+            redis_client.set_analysis_status(
+                ticker,
+                'completed',
+                progress='Analysis completed',
+                progress_percent=100.0,
+                started_at=started_at,
+                completed_at=datetime.now().isoformat(),
+                result=result
+            )
+            
+            # Remove from Redis after 5 minutes (cleanup)
+            await asyncio.sleep(300)  # 5 minutes
+            redis_client.delete_analysis_status(ticker)
+        except Exception as e:
+            # Mark as failed
+            redis_client.set_analysis_status(
+                ticker,
+                'failed',
+                progress=f'Error: {str(e)}',
+                progress_percent=0.0,
+                started_at=started_at,
+                failed_at=datetime.now().isoformat(),
+                error=str(e)
+            )
+            
+            # Remove from Redis after 1 minute (cleanup)
+            await asyncio.sleep(60)  # 1 minute
+            redis_client.delete_analysis_status(ticker)
 
 @app.get("/analysis/{ticker}")
 def get_analysis_result(ticker: str):

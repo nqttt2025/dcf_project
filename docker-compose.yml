@@ -93,6 +93,7 @@ services:
     networks:
       - dcf-network
     restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--ssl-keyfile", "/app/ssl/gateway.key", "--ssl-certfile", "/app/ssl/gateway.crt"]
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('https://localhost:8000/health', verify=False)"]
       interval: 30s
@@ -127,6 +128,7 @@ services:
     networks:
       - dcf-network
     restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2", "--limit-concurrency", "20"]
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
       interval: 30s

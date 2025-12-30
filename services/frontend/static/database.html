@@ -673,7 +673,6 @@
         <div class="nav-links">
             <a href="/static/index.html">🏠 Dashboard</a>
             <a href="/static/monitoring.html">📊 Monitoring</a>
-            <a href="/static/health.html">💚 Health</a>
         </div>
         
         <div class="action-bar">
@@ -705,12 +704,6 @@
         <div id="error" class="error" style="display: none;"></div>
         
         <div id="content" style="display: none;">
-            <!-- Health Status -->
-            <div class="section">
-                <h2>💚 Health Status</h2>
-                <div id="health-status"></div>
-            </div>
-            
             <!-- Database Statistics -->
             <div class="section">
                 <h2>📊 Database Statistics</h2>
@@ -753,21 +746,17 @@
             if (contentEl) contentEl.style.display = 'none';
             
             try {
-                const [healthResponse, statsResponse, tablesResponse] = await Promise.all([
-                    fetch(`${DATABASE_SERVICE_URL}/health`),
+                const [statsResponse, tablesResponse] = await Promise.all([
                     fetch(`${DATABASE_SERVICE_URL}/stats`),
                     fetch(`${DATABASE_SERVICE_URL}/tables`)
                 ]);
                 
-                if (!healthResponse.ok) throw new Error(`Health check failed: ${healthResponse.status}`);
                 if (!statsResponse.ok) throw new Error(`Stats fetch failed: ${statsResponse.status}`);
                 if (!tablesResponse.ok) throw new Error(`Tables fetch failed: ${tablesResponse.status}`);
                 
-                const health = await healthResponse.json();
                 const stats = await statsResponse.json();
                 const tables = await tablesResponse.json();
                 
-                displayHealthStatus(health);
                 displayStats(stats);
                 allTables = tables.tables || [];
                 await displayTables(allTables);
@@ -790,36 +779,6 @@
             } finally {
                 isRefreshing = false;
             }
-        }
-        
-        function displayHealthStatus(health) {
-            const statusDiv = document.getElementById('health-status');
-            const overallStatus = health.overall_status || health.status || 'unknown';
-            const statusClass = overallStatus === 'healthy' ? 'healthy' : 'unhealthy';
-            
-            statusDiv.innerHTML = `
-                <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
-                    <div>
-                    <strong>Overall Status:</strong> 
-                    <span class="health-status ${statusClass}">${overallStatus.toUpperCase()}</span>
-                </div>
-                    <div>
-                    <strong>Database:</strong> 
-                    <span class="health-status ${health.database === 'healthy' ? 'healthy' : 'unhealthy'}">
-                        ${health.database}
-                    </span>
-                </div>
-                <div>
-                    <strong>Redis:</strong> 
-                    <span class="health-status ${health.redis === 'healthy' ? 'healthy' : health.redis === 'not_configured' ? 'not_configured' : 'unhealthy'}">
-                        ${health.redis}
-                    </span>
-                </div>
-                    <div style="margin-left: auto; color: #6b7280; font-size: 13px;">
-                    Last checked: ${new Date(health.timestamp).toLocaleString()}
-                    </div>
-                </div>
-            `;
         }
         
         function displayStats(stats) {
