@@ -35,7 +35,7 @@ Sync Service là service chuyên biệt xử lý tất cả hoạt động đồ
          ┌───────────────────┼───────────────────┐
          ▼                   ▼                   ▼
     ┌─────────┐         ┌─────────┐         ┌─────────┐
-    │ vnstock │         │PostgreSQL│         │ Redis   │
+    │ vnstock │         │PostgreSQL│        │ Redis   │
     │   API   │         │         │         │ Cache   │
     └─────────┘         └─────────┘         └─────────┘
 ```

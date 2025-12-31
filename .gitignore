@@ -4,7 +4,9 @@ venv/
 **/*.log
 # Keep logs directory structure but ignore log files
 logs/app/*.log
+logs/app/*.log.*
 logs/docker/*.log
+logs/docker/*.log.*
 !logs/app/.gitkeep
 !logs/docker/.gitkeep
 **/*.tar
