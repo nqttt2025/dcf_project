@@ -1,4 +1,26 @@
 # Test dependencies
-docker>=5.0.0
-requests>=2.31.0
 
+# Core testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+pytest-timeout>=2.2.0
+
+# HTTP/API testing
+httpx>=0.24.0
+requests>=2.31.0
+respx>=0.20.0
+
+# Mocking
+fakeredis>=2.20.0
+factory-boy>=3.3.0
+
+# Docker
+docker>=5.0.0
+
+# Retry mechanism (also needed in main requirements)
+tenacity>=8.2.0
+
+# Async support
+anyio>=4.0.0
