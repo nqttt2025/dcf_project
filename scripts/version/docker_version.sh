@@ -34,7 +34,7 @@ get_requirements_hash() {
 }
 
 # Read version from JSON file
-get_version() {
+function func_get_version() {
     local service="${1:-base}"
     
     if [[ ! -f "$VERSIONS_FILE" ]]; then
@@ -174,13 +174,13 @@ sync_with_git_tag() {
     # Base image version: Only update if requirements.txt changed
     # Otherwise keep current base version (independent versioning)
     local base_version
-    base_version=$(get_version "base")
+    base_version=$(func_get_version "base")
     
     if check_base_needs_rebuild; then
         # Requirements changed - increment base version
         log_info "Base image needs rebuild (requirements.txt changed)"
         increment_base_version >/dev/null 2>&1
-        base_version=$(get_version "base")
+        base_version=$(func_get_version "base")
         log_info "Base image version incremented to: $base_version"
     else
         log_info "Base image unchanged, keeping version: $base_version"
@@ -198,7 +198,7 @@ sync_with_git_tag() {
 # Increment base version (only when requirements.txt changes)
 increment_base_version() {
     local current_version
-    current_version=$(get_version "base")
+    current_version=$(func_get_version "base")
     
     if [[ -z "$current_version" ]]; then
         log_error "Cannot get current base version"
@@ -225,7 +225,7 @@ increment_base_version() {
 # Commands
 # ============================================================================
 
-cmd_get() {
+function func_cmd_get() {
     local service="${1:-all}"
     
     if [[ "$service" == "all" ]]; then
@@ -233,14 +233,14 @@ cmd_get() {
         echo ""
         echo "Project Version (from git tag):"
         local project_version
-        project_version=$("$PROJECT_ROOT/scripts/get_version.sh")
+        project_version=$("$PROJECT_ROOT/scripts/utils/get_version.sh")
         echo "  $project_version"
     elif [[ "$service" == "project" ]]; then
         # Get project version from git tag
-        "$PROJECT_ROOT/scripts/get_version.sh"
+        "$PROJECT_ROOT/scripts/utils/get_version.sh"
     else
         local version
-        version=$(get_version "$service")
+        version=$(func_get_version "$service")
         if [[ -n "$version" ]]; then
             echo "$version"
         else
@@ -250,7 +250,7 @@ cmd_get() {
     fi
 }
 
-cmd_set() {
+function func_cmd_set() {
     local service="$1"
     local version="$2"
     
@@ -269,7 +269,7 @@ cmd_set() {
     log_success "Set $service version to $version"
 }
 
-cmd_check_base() {
+function func_cmd_check_base() {
     if check_base_needs_rebuild; then
         echo "rebuild"
         return 0
@@ -279,7 +279,7 @@ cmd_check_base() {
     fi
 }
 
-cmd_update() {
+function func_cmd_update() {
     local service="${1:-base}"
     
     if [[ "$service" == "base" ]]; then
@@ -309,11 +309,11 @@ cmd_update() {
 }
 
 # Update hash only (without incrementing version)
-cmd_update_hash() {
+function func_cmd_update_hash() {
     update_base_hash
 }
 
-cmd_sync_git() {
+function func_cmd_sync_git() {
     sync_with_git_tag
 }
 
@@ -353,22 +353,22 @@ main() {
     
     case "$command" in
         get)
-            cmd_get "${2:-all}"
+            func_cmd_get "${2:-all}"
             ;;
         set)
-            cmd_set "$2" "$3"
+            func_cmd_set "$2" "$3"
             ;;
         check-base)
-            cmd_check_base
+            func_cmd_check_base
             ;;
         update)
-            cmd_update "${2:-base}"
+            func_cmd_update "${2:-base}"
             ;;
         update-hash)
-            cmd_update_hash
+            func_cmd_update_hash
             ;;
         sync-git)
-            cmd_sync_git
+            func_cmd_sync_git
             ;;
         help|--help|-h)
             show_help
