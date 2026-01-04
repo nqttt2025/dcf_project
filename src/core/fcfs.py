@@ -4,6 +4,28 @@ from io import StringIO
 from ..utils.logger import get_logger
 from ..utils.cache_manager import get_cache_manager
 
+# Import retry mechanism
+try:
+    from ..utils.retry import with_retry, RetryConfig, get_retry_stats
+    HAS_RETRY = True
+    # Configure retry for vnstock API calls
+    VNSTOCK_RETRY_CONFIG = RetryConfig(
+        max_attempts=3,
+        min_wait=2.0,
+        max_wait=10.0,
+        timeout=60.0,
+        retry_exceptions=(TimeoutError, ConnectionError, Exception),
+    )
+except ImportError:
+    HAS_RETRY = False
+    VNSTOCK_RETRY_CONFIG = None
+    
+    # Fallback decorator that does nothing
+    def with_retry(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Try to import data fetcher and redis client (optional)
 try:
     from ..utils.data_fetcher import get_financial_ttm, get_market_data, get_shares_outstanding as get_shares_from_fetcher
@@ -62,6 +84,50 @@ except:
 
 logger = get_logger()
 cache_manager = get_cache_manager()
+
+
+def _call_vnstock_api(api_func, func_name: str = "vnstock_api"):
+    """
+    Call vnstock API with retry mechanism.
+    
+    Args:
+        api_func: Callable that makes the vnstock API call
+        func_name: Name for logging purposes
+        
+    Returns:
+        Result from the API call
+        
+    Raises:
+        Exception: If all retries fail
+    """
+    if HAS_RETRY and VNSTOCK_RETRY_CONFIG:
+        @with_retry(config=VNSTOCK_RETRY_CONFIG, func_name=func_name)
+        def wrapped_call():
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            try:
+                sys.stdout = StringIO()
+                sys.stderr = StringIO()
+                result = api_func()
+                return result
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+        
+        return wrapped_call()
+    else:
+        # Fallback without retry
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            result = api_func()
+            return result
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
 
 stock_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -148,16 +214,13 @@ def get_free_cash_flow_ttm(ticker):
     
     try:
         logger.info(f"Calculating FCF TTM for {ticker} from vnstock (summing last 4 quarters)...")
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        try:
-            sys.stdout = StringIO()
-            sys.stderr = StringIO()
+        
+        # Use retry mechanism for vnstock API call
+        def fetch_cash_flow():
             stock = Vnstock().stock(symbol=ticker.upper(), source="VCI")
-            cash_flow_df = stock.finance.cash_flow()
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+            return stock.finance.cash_flow()
+        
+        cash_flow_df = _call_vnstock_api(fetch_cash_flow, f"cash_flow_{ticker}")
         
         if cash_flow_df.empty:
             logger.warning(f"No cash flow data available for {ticker}")
@@ -434,16 +497,13 @@ def get_shares_outstanding(ticker):
 
     try:
         logger.info(f"Fetching shares outstanding for {ticker} using vnstock...")
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        try:
-            sys.stdout = StringIO()
-            sys.stderr = StringIO()
+        
+        # Use retry mechanism for vnstock API call
+        def fetch_balance_sheet():
             stock = Vnstock().stock(symbol=ticker.upper(), source="VCI")
-            balance_sheet_df = stock.finance.balance_sheet()
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+            return stock.finance.balance_sheet()
+        
+        balance_sheet_df = _call_vnstock_api(fetch_balance_sheet, f"balance_sheet_{ticker}")
 
         if balance_sheet_df.empty:
             logger.warning(f"No balance sheet data available for {ticker}")
@@ -736,17 +796,13 @@ def price_board_stock(ticker):
     logger.warning(f"No price found in database/cache for {ticker}, fetching from vnstock API (may be slow)...")
     try:
         logger.info(f"Fetching price for {ticker} using vnstock...")
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        try:
-            sys.stdout = StringIO()
-            sys.stderr = StringIO()
+        
+        # Use retry mechanism for vnstock API call
+        def fetch_price_board():
             stock = Vnstock().stock(symbol=ticker.upper(), source="VCI")
-            # Get price board data
-            price_board_df = stock.trading.price_board([stock.symbol])
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+            return stock.trading.price_board([stock.symbol])
+        
+        price_board_df = _call_vnstock_api(fetch_price_board, f"price_board_{ticker}")
 
         if price_board_df is not None and not price_board_df.empty:
             # Get the match price from the price board
@@ -834,17 +890,13 @@ def get_market_cap(ticker):
     logger.warning(f"No market cap found in database/cache for {ticker}, fetching from vnstock API (may be slow)...")
     try:
         logger.info(f"Fetching market cap for {ticker} using vnstock...")
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        try:
-            sys.stdout = StringIO()
-            sys.stderr = StringIO()
+        
+        # Use retry mechanism for vnstock API call
+        def fetch_ratio_summary():
             stock = Vnstock().stock(symbol=ticker.upper(), source="VCI")
-            # Get ratio summary which contains EV (Enterprise Value / Market Cap)
-            ratio_df = stock.company.ratio_summary()
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+            return stock.company.ratio_summary()
+        
+        ratio_df = _call_vnstock_api(fetch_ratio_summary, f"ratio_summary_{ticker}")
 
         if ratio_df is not None and not ratio_df.empty:
             # Get the EV (Enterprise Value) which equals Market Cap

@@ -26,6 +26,38 @@ import configparser
 import json
 from datetime import datetime, timezone
 
+# Import cache utilities
+try:
+    from ..utils.cache_utils import (
+        get_cache_service, 
+        CacheKey, 
+        CacheTTL,
+    )
+    HAS_CACHE = True
+except ImportError:
+    HAS_CACHE = False
+    get_cache_service = None
+
+# Import error handler
+try:
+    from ..utils.error_handler import (
+        DCFErrorHandler,
+        analyze_calculation_viability,
+        with_error_recovery,
+    )
+    HAS_ERROR_HANDLER = True
+except ImportError:
+    HAS_ERROR_HANDLER = False
+    DCFErrorHandler = None
+
+# Import shares validator
+try:
+    from ..utils.shares_validator import SharesValidator, ValidationConfidence
+    HAS_SHARES_VALIDATOR = True
+except ImportError:
+    HAS_SHARES_VALIDATOR = False
+    SharesValidator = None
+
 logger = get_logger()
 
 
@@ -126,25 +158,36 @@ class DCFCalculator:
 
     async def fetch_data_async(self):
         """
-        Fetch financial data asynchronously (parallel execution)
+        Fetch financial data asynchronously (parallel execution) with error recovery.
+        
+        Uses error handler for graceful degradation when data fetch fails.
         """
         self.logger.info(f"Starting async data fetch for {self.ticker}...")
+        
+        # Initialize error handler if available
+        if HAS_ERROR_HANDLER:
+            self.error_handler = DCFErrorHandler(self.ticker)
+        else:
+            self.error_handler = None
 
-        # Tạo các task với timeout riêng cho từng API call (60 giây mỗi call)
-        # Điều này ngăn một API call bị hang làm block toàn bộ analysis
         async def fetch_with_timeout(func, *args, timeout=60.0, task_name="Unknown"):
-            """Wrapper để thêm timeout cho mỗi API call"""
+            """Wrapper để thêm timeout cho mỗi API call với error recovery"""
             try:
                 result = await asyncio.wait_for(
                     asyncio.to_thread(func, *args),
                     timeout=timeout
                 )
                 return result
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError as e:
                 self.logger.error(f"Timeout fetching {task_name} for {self.ticker} after {timeout}s")
+                # Record error in error handler
+                if self.error_handler:
+                    self.error_handler.handle_fetch_error(task_name, e)
                 return None
             except Exception as e:
                 self.logger.error(f"Error fetching {task_name} for {self.ticker}: {e}")
+                if self.error_handler:
+                    self.error_handler.handle_fetch_error(task_name, e)
                 return None
 
         # Tạo các task với timeout riêng
@@ -168,7 +211,6 @@ class DCFCalculator:
             )
         except asyncio.TimeoutError:
             self.logger.error(f"Overall timeout fetching financial data for {self.ticker} after 5 minutes")
-            # Return None values to indicate failure
             results = [None] * len(tasks)
 
         # Check for errors and log warnings
@@ -176,10 +218,11 @@ class DCFCalculator:
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 self.logger.error(f"Error in task {i} ({task_names[i] if i < len(task_names) else 'Unknown'}): {result}")
+                results[i] = None  # Convert exception to None
             elif result is None:
-                self.logger.warning(f"Task {i} ({task_names[i] if i < len(task_names) else 'Unknown'}) returned None for {self.ticker} - may use cached data")
+                self.logger.warning(f"Task {i} ({task_names[i] if i < len(task_names) else 'Unknown'}) returned None for {self.ticker}")
 
-        return {
+        data = {
             'fcf': results[0],
             'ge': results[1],
             'shares': results[2],
@@ -188,6 +231,38 @@ class DCFCalculator:
             'market_cap': results[5],
             'industry_pe': results[6] if results[6] is not None else None,
         }
+        
+        # Cross-validate shares using SharesValidator if available
+        if HAS_SHARES_VALIDATOR and data['shares'] is not None:
+            try:
+                validator = SharesValidator(self.ticker)
+                validator.add_source("vnstock_api", data['shares'], priority=2)
+                
+                # Add market cap calculation as second source
+                if data['market_cap'] and data['price'] and data['price'] > 0:
+                    validator.add_from_market_cap(data['market_cap'], data['price'])
+                
+                validation_result = validator.validate()
+                
+                if validation_result.is_valid:
+                    data['shares'] = validation_result.value
+                    data['shares_confidence'] = validation_result.confidence.value
+                    data['shares_sources'] = validation_result.sources_used
+                    
+                    if validation_result.discrepancies:
+                        self.logger.warning(f"Shares discrepancies: {validation_result.discrepancies}")
+                else:
+                    self.logger.warning(f"Shares validation failed, using original value")
+            except Exception as e:
+                self.logger.debug(f"Shares validation error: {e}")
+        
+        # Log error summary if error handler is active
+        if self.error_handler and self.error_handler.errors:
+            summary = self.error_handler.get_error_summary()
+            self.logger.warning(f"Data fetch completed with {summary['total_errors']} errors")
+            data['_fetch_errors'] = summary
+        
+        return data
 
     def calculate_dcf(self, data):
         """Calculate DCF valuation"""
